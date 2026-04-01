@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="fr"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>GlobalExceptionHandler.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">service-vehicules</a> &gt; <a href="index.source.html" class="el_package">fr.sgfv.vehicules.exception</a> &gt; <span class="el_source">GlobalExceptionHandler.java</span></div><h1>GlobalExceptionHandler.java</h1><pre class="source lang-java linenums">package fr.sgfv.vehicules.exception;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.*;
+
+import java.time.LocalDateTime;
+import java.util.Map;
+
+@RestControllerAdvice
+<span class="fc" id="L12">public class GlobalExceptionHandler {</span>
+
+    @ExceptionHandler(VehiculeNotFoundException.class)
+    public ResponseEntity&lt;Map&lt;String, Object&gt;&gt; handleNotFound(VehiculeNotFoundException ex) {
+<span class="fc" id="L16">        return error(HttpStatus.NOT_FOUND, &quot;VEHICULE_INTROUVABLE&quot;, ex.getMessage());</span>
+    }
+
+    @ExceptionHandler(PlaqueDejaExistanteException.class)
+    public ResponseEntity&lt;Map&lt;String, Object&gt;&gt; handlePlaque(PlaqueDejaExistanteException ex) {
+<span class="fc" id="L21">        return error(HttpStatus.CONFLICT, &quot;PLAQUE_DEJA_EXISTANTE&quot;, ex.getMessage());</span>
+    }
+
+    @ExceptionHandler(VehiculeHorsServiceException.class)
+    public ResponseEntity&lt;Map&lt;String, Object&gt;&gt; handleHorsService(VehiculeHorsServiceException ex) {
+<span class="nc" id="L26">        return error(HttpStatus.FORBIDDEN, &quot;VEHICULE_HORS_SERVICE&quot;, ex.getMessage());</span>
+    }
+
+    @ExceptionHandler(KilometrageInvalideException.class)
+    public ResponseEntity&lt;Map&lt;String, Object&gt;&gt; handleKm(KilometrageInvalideException ex) {
+<span class="nc" id="L31">        return error(HttpStatus.BAD_REQUEST, &quot;KILOMETRAGE_INVALIDE&quot;, ex.getMessage());</span>
+    }
+
+    @ExceptionHandler(TransitionStatutInvalideException.class)
+    public ResponseEntity&lt;Map&lt;String, Object&gt;&gt; handleTransition(TransitionStatutInvalideException ex) {
+<span class="nc" id="L36">        return error(HttpStatus.BAD_REQUEST, &quot;TRANSITION_INVALIDE&quot;, ex.getMessage());</span>
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity&lt;Map&lt;String, Object&gt;&gt; handleValidation(MethodArgumentNotValidException ex) {
+<span class="fc" id="L41">        String message = ex.getBindingResult().getFieldErrors()</span>
+<span class="fc" id="L42">            .stream().findFirst()</span>
+<span class="fc" id="L43">            .map(e -&gt; e.getDefaultMessage())</span>
+<span class="fc" id="L44">            .orElse(&quot;Données invalides&quot;);</span>
+<span class="fc" id="L45">        return error(HttpStatus.BAD_REQUEST, &quot;VALIDATION_ERROR&quot;, message);</span>
+    }
+
+    private ResponseEntity&lt;Map&lt;String, Object&gt;&gt; error(HttpStatus status, String code, String message) {
+<span class="fc" id="L49">        return ResponseEntity.status(status).body(Map.of(</span>
+<span class="fc" id="L50">            &quot;code&quot;, code,</span>
+<span class="fc" id="L51">            &quot;message&quot;, message,</span>
+<span class="fc" id="L52">            &quot;timestamp&quot;, LocalDateTime.now().toString()</span>
+        ));
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

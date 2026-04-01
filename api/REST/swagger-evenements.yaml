@@ -1,0 +1,311 @@
+openapi: 3.0.3
+info:
+  title: service-alertes API
+  description: |
+    Centralise toutes les notifications du SGFV.
+    
+    ## Règles de visibilité par rôle
+    | Rôle | Alertes visibles |
+    |---|---|
+    | Conducteur | Uniquement ses propres alertes (utilisateur_id = keycloak_id) |
+    | Technicien | Toutes les alertes CRITIQUE et URGENCE |
+    | Admin | Absolument toutes les alertes |
+    
+    ## Les 8 types d'alertes fixes
+    | Type | Niveau | Destinataire | Source Kafka |
+    |---|---|---|---|
+    | VEHICULE_ASSIGNE | INFO | CONDUCTEUR | conducteurs |
+    | REVISION_PLANIFIEE | INFO | TECHNICIEN | maintenance |
+    | PERMIS_EXPIRE | AVERTISSEMENT | ADMIN | conducteurs |
+    | SEUIL_KM_ATTEINT | CRITIQUE | TECHNICIEN | maintenance |
+    | MAINTENANCE_TERMINEE | INFO | ADMIN | maintenance |
+    | PANNE_SIGNALEE | URGENCE | TECHNICIEN | maintenance |
+    | SORTIE_ZONE | URGENCE | ADMIN | locations |
+    | VITESSE_EXCESSIVE | CRITIQUE | ADMIN | locations |
+    
+    ## Règle spéciale
+    Alerte URGENCE non lue après 1h → réémise automatiquement via Kafka.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:3002
+    description: Environnement local
+
+tags:
+  - name: Alertes
+    description: Gestion des alertes et notifications
+
+paths:
+
+  /alertes:
+    get:
+      tags: [Alertes]
+      summary: Liste les alertes (filtrées selon le rôle)
+      description: |
+        La liste est automatiquement filtrée selon le rôle extrait du JWT.
+        Un conducteur ne voit que ses alertes.
+        Un technicien voit toutes les alertes CRITIQUE et URGENCE.
+        Un admin voit tout.
+      parameters:
+        - name: niveau
+          in: query
+          schema:
+            type: string
+            enum: [INFO, AVERTISSEMENT, CRITIQUE, URGENCE]
+        - name: est_lu
+          in: query
+          schema:
+            type: boolean
+          example: false
+        - name: type_evenement
+          in: query
+          schema:
+            type: string
+            enum: [VEHICULE_ASSIGNE, REVISION_PLANIFIEE, PERMIS_EXPIRE, SEUIL_KM_ATTEINT, MAINTENANCE_TERMINEE, PANNE_SIGNALEE, SORTIE_ZONE, VITESSE_EXCESSIVE]
+      responses:
+        '200':
+          description: Liste des alertes filtrées
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AlerteDTO'
+              example:
+                - id: "aa0e8400-e29b-41d4-a716-446655440001"
+                  type_evenement: "PANNE_SIGNALEE"
+                  niveau: "URGENCE"
+                  role_destinataire: "TECHNICIEN"
+                  vehicule_id: "550e8400-e29b-41d4-a716-446655440002"
+                  utilisateur_id: "kc-tech-001"
+                  message: "Panne signalée sur le véhicule EF-456-GH — intervention requise"
+                  est_lu: false
+                  date_lecture: null
+                  date_creation: "2024-03-15T09:05:00Z"
+                - id: "aa0e8400-e29b-41d4-a716-446655440002"
+                  type_evenement: "VITESSE_EXCESSIVE"
+                  niveau: "CRITIQUE"
+                  role_destinataire: "ADMIN"
+                  vehicule_id: "550e8400-e29b-41d4-a716-446655440002"
+                  utilisateur_id: "kc-admin-001"
+                  message: "Vitesse excessive détectée : 145 km/h (limite 130 km/h)"
+                  est_lu: true
+                  date_lecture: "2024-03-15T09:10:00Z"
+                  date_creation: "2024-03-15T09:08:00Z"
+        '401':
+          $ref: '#/components/responses/NonAutorise'
+      security:
+        - bearerAuth: []
+
+  /alertes/moi:
+    get:
+      tags: [Alertes]
+      summary: Mes alertes personnelles
+      description: Retourne uniquement les alertes de l'utilisateur identifié par son JWT
+      responses:
+        '200':
+          description: Mes alertes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AlerteDTO'
+              example:
+                - id: "aa0e8400-e29b-41d4-a716-446655440003"
+                  type_evenement: "VEHICULE_ASSIGNE"
+                  niveau: "INFO"
+                  role_destinataire: "CONDUCTEUR"
+                  vehicule_id: "550e8400-e29b-41d4-a716-446655440001"
+                  utilisateur_id: "kc-001"
+                  message: "Le véhicule AB-123-CD vous a été assigné"
+                  est_lu: false
+                  date_lecture: null
+                  date_creation: "2024-03-15T08:00:00Z"
+        '401':
+          $ref: '#/components/responses/NonAutorise'
+      security:
+        - bearerAuth: []
+
+  /alertes/{id}:
+    get:
+      tags: [Alertes]
+      summary: Détail d'une alerte
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Détail de l'alerte
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlerteDTO'
+              example:
+                id: "aa0e8400-e29b-41d4-a716-446655440001"
+                type_evenement: "PANNE_SIGNALEE"
+                niveau: "URGENCE"
+                role_destinataire: "TECHNICIEN"
+                vehicule_id: "550e8400-e29b-41d4-a716-446655440002"
+                utilisateur_id: "kc-tech-001"
+                message: "Panne signalée sur le véhicule EF-456-GH — intervention requise"
+                est_lu: false
+                date_lecture: null
+                date_creation: "2024-03-15T09:05:00Z"
+        '401':
+          $ref: '#/components/responses/NonAutorise'
+        '403':
+          $ref: '#/components/responses/AccesRefuse'
+        '404':
+          $ref: '#/components/responses/Introuvable'
+      security:
+        - bearerAuth: []
+
+    delete:
+      tags: [Alertes]
+      summary: Supprimer une alerte (Admin uniquement)
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '204':
+          description: Alerte supprimée
+        '401':
+          $ref: '#/components/responses/NonAutorise'
+        '403':
+          $ref: '#/components/responses/AccesRefuse'
+        '404':
+          $ref: '#/components/responses/Introuvable'
+      security:
+        - bearerAuth: []
+
+  /alertes/{id}/lire:
+    patch:
+      tags: [Alertes]
+      summary: Marquer une alerte comme lue
+      description: |
+        est_lu passe à TRUE.
+        date_lecture est renseignée automatiquement avec l'heure actuelle.
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Alerte marquée comme lue
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlerteDTO'
+              example:
+                id: "aa0e8400-e29b-41d4-a716-446655440001"
+                type_evenement: "PANNE_SIGNALEE"
+                niveau: "URGENCE"
+                role_destinataire: "TECHNICIEN"
+                vehicule_id: "550e8400-e29b-41d4-a716-446655440002"
+                utilisateur_id: "kc-tech-001"
+                message: "Panne signalée sur le véhicule EF-456-GH"
+                est_lu: true
+                date_lecture: "2024-03-15T09:15:00Z"
+                date_creation: "2024-03-15T09:05:00Z"
+        '401':
+          $ref: '#/components/responses/NonAutorise'
+        '404':
+          $ref: '#/components/responses/Introuvable'
+      security:
+        - bearerAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token JWT fourni par Keycloak (realm sgfv)
+
+  parameters:
+    IdPath:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      example: "aa0e8400-e29b-41d4-a716-446655440001"
+
+  schemas:
+    AlerteDTO:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type_evenement:
+          type: string
+          enum: [VEHICULE_ASSIGNE, REVISION_PLANIFIEE, PERMIS_EXPIRE, SEUIL_KM_ATTEINT, MAINTENANCE_TERMINEE, PANNE_SIGNALEE, SORTIE_ZONE, VITESSE_EXCESSIVE]
+        niveau:
+          type: string
+          enum: [INFO, AVERTISSEMENT, CRITIQUE, URGENCE]
+        role_destinataire:
+          type: string
+          enum: [CONDUCTEUR, TECHNICIEN, ADMIN]
+        vehicule_id:
+          type: string
+          format: uuid
+          nullable: true
+        utilisateur_id:
+          type: string
+          nullable: true
+          description: keycloak_id du destinataire
+        message:
+          type: string
+          example: "Panne signalée sur le véhicule EF-456-GH"
+        est_lu:
+          type: boolean
+          default: false
+        date_lecture:
+          type: string
+          format: date-time
+          nullable: true
+        date_creation:
+          type: string
+          format: date-time
+
+    ErreurDTO:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+
+  responses:
+    Introuvable:
+      description: Ressource non trouvée
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErreurDTO'
+          example:
+            code: "ALERTE_INTROUVABLE"
+            message: "Aucune alerte trouvée avec cet identifiant"
+            timestamp: "2024-03-15T10:00:00Z"
+    NonAutorise:
+      description: Token JWT manquant ou invalide
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErreurDTO'
+          example:
+            code: "TOKEN_INVALIDE"
+            message: "Token JWT manquant ou expiré"
+            timestamp: "2024-03-15T10:00:00Z"
+    AccesRefuse:
+      description: Droits insuffisants
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErreurDTO'
+          example:
+            code: "ACCES_REFUSE"
+            message: "Vous n'avez pas accès à cette alerte"
+            timestamp: "2024-03-15T10:00:00Z"

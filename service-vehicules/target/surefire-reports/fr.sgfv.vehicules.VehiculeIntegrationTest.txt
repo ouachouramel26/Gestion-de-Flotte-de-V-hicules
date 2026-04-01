@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: fr.sgfv.vehicules.VehiculeIntegrationTest
+-------------------------------------------------------------------------------
+Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 61.93 s -- in fr.sgfv.vehicules.VehiculeIntegrationTest

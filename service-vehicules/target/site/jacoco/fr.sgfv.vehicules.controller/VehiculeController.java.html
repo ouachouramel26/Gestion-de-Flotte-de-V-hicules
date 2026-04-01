@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="fr"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>VehiculeController.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">service-vehicules</a> &gt; <a href="index.source.html" class="el_package">fr.sgfv.vehicules.controller</a> &gt; <span class="el_source">VehiculeController.java</span></div><h1>VehiculeController.java</h1><pre class="source lang-java linenums">package fr.sgfv.vehicules.controller;
+
+import fr.sgfv.vehicules.dto.*;
+import fr.sgfv.vehicules.service.VehiculeService;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.UUID;
+
+@RestController
+@RequestMapping(&quot;/vehicules&quot;)
+@RequiredArgsConstructor
+public class VehiculeController {
+
+    private final VehiculeService vehiculeService;
+
+    @GetMapping
+    public ResponseEntity&lt;List&lt;VehiculeDTO&gt;&gt; lister(
+            @RequestParam(required = false) String statut,
+            @RequestParam(required = false) String marque) {
+<span class="nc" id="L25">        return ResponseEntity.ok(vehiculeService.listerVehicules(statut, marque));</span>
+    }
+
+    @GetMapping(&quot;/{id}&quot;)
+    public ResponseEntity&lt;VehiculeDTO&gt; getById(@PathVariable UUID id) {
+<span class="nc" id="L30">        return ResponseEntity.ok(vehiculeService.getVehicule(id));</span>
+    }
+
+    @PostMapping
+    public ResponseEntity&lt;VehiculeDTO&gt; creer(
+            @Valid @RequestBody CreateVehiculeDTO dto) {
+<span class="fc" id="L36">        return ResponseEntity.status(HttpStatus.CREATED)</span>
+<span class="fc" id="L37">            .body(vehiculeService.creerVehicule(dto));</span>
+    }
+
+    @PutMapping(&quot;/{id}&quot;)
+    public ResponseEntity&lt;VehiculeDTO&gt; modifier(
+            @PathVariable UUID id,
+            @Valid @RequestBody UpdateVehiculeDTO dto) {
+<span class="fc" id="L44">        return ResponseEntity.ok(vehiculeService.modifierVehicule(id, dto));</span>
+    }
+
+    @PatchMapping(&quot;/{id}/statut&quot;)
+    public ResponseEntity&lt;VehiculeDTO&gt; changerStatut(
+            @PathVariable UUID id,
+            @Valid @RequestBody ChangerStatutDTO dto) {
+<span class="fc" id="L51">        return ResponseEntity.ok(vehiculeService.changerStatut(id, dto));</span>
+    }
+
+    @PatchMapping(&quot;/{id}/assigner&quot;)
+    public ResponseEntity&lt;VehiculeDTO&gt; assigner(
+            @PathVariable UUID id,
+            @Valid @RequestBody AssignerVehiculeDTO dto) {
+<span class="nc" id="L58">        return ResponseEntity.ok(vehiculeService.assignerConducteur(id, dto));</span>
+    }
+
+    @DeleteMapping(&quot;/{id}&quot;)
+    public ResponseEntity&lt;VehiculeDTO&gt; archiver(@PathVariable UUID id) {
+<span class="fc" id="L63">        return ResponseEntity.ok(vehiculeService.archiverVehicule(id));</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

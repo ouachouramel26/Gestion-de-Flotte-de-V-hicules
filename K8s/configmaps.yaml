@@ -1,0 +1,95 @@
+# ─────────────────────────────────────────────────
+# ConfigMap service-vehicules
+# ─────────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: config-vehicules
+  namespace: sgfv
+data:
+  SERVER_PORT: "8081"
+  SPRING_DATASOURCE_URL: "jdbc:postgresql://postgres-vehicules-postgresql:5432/vehicules_db"
+  SPRING_KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
+  KEYCLOAK_AUTH_SERVER_URL: "http://keycloak:8080"
+  KEYCLOAK_REALM: "sgfv"
+  KEYCLOAK_RESOURCE: "sgfv-backend"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
+  OTEL_SERVICE_NAME: "service-vehicules"
+
+---
+# ─────────────────────────────────────────────────
+# ConfigMap service-conducteurs
+# ─────────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: config-conducteurs
+  namespace: sgfv
+data:
+  SERVER_PORT: "8082"
+  SPRING_DATASOURCE_URL: "jdbc:postgresql://postgres-conducteurs-postgresql:5432/conducteurs_db"
+  SPRING_KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
+  KEYCLOAK_AUTH_SERVER_URL: "http://keycloak:8080"
+  KEYCLOAK_REALM: "sgfv"
+  KEYCLOAK_RESOURCE: "sgfv-backend"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
+  OTEL_SERVICE_NAME: "service-conducteurs"
+
+---
+# ─────────────────────────────────────────────────
+# ConfigMap service-maintenance
+# ─────────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: config-maintenance
+  namespace: sgfv
+data:
+  SERVER_PORT: "8083"
+  SPRING_DATASOURCE_URL: "jdbc:postgresql://postgres-maintenance-postgresql:5432/maintenance_db"
+  SPRING_KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
+  KEYCLOAK_AUTH_SERVER_URL: "http://keycloak:8080"
+  KEYCLOAK_REALM: "sgfv"
+  KEYCLOAK_RESOURCE: "sgfv-backend"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
+  OTEL_SERVICE_NAME: "service-maintenance"
+
+---
+# ─────────────────────────────────────────────────
+# ConfigMap service-localisation
+# ─────────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: config-localisation
+  namespace: sgfv
+data:
+  PORT: "8084"
+  GRPC_PORT: "3001"
+  DATABASE_URL: "postgresql://sgfv:sgfv_secret@postgres-localisation-postgresql:5432/localisation_db"
+  KAFKA_BROKERS: "kafka:9092"
+  KEYCLOAK_URL: "http://keycloak:8080"
+  KEYCLOAK_REALM: "sgfv"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
+  OTEL_SERVICE_NAME: "service-localisation"
+  GPS_RECORD_INTERVAL_SECONDS: "10"
+  VITESSE_EXCESSIVE_SEUIL: "130"
+
+---
+# ─────────────────────────────────────────────────
+# ConfigMap service-alertes
+# ─────────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: config-alertes
+  namespace: sgfv
+data:
+  PORT: "3002"
+  DATABASE_URL: "postgresql://sgfv:sgfv_secret@postgres-alertes-postgresql:5432/alertes_db"
+  KAFKA_BROKERS: "kafka:9092"
+  KEYCLOAK_URL: "http://keycloak:8080"
+  KEYCLOAK_REALM: "sgfv"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
+  OTEL_SERVICE_NAME: "service-alertes"
+  ALERTE_URGENCE_REEMISSION_MS: "3600000"

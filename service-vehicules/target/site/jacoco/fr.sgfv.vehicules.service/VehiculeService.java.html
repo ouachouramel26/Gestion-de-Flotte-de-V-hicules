@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="fr"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>VehiculeService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">service-vehicules</a> &gt; <a href="index.source.html" class="el_package">fr.sgfv.vehicules.service</a> &gt; <span class="el_source">VehiculeService.java</span></div><h1>VehiculeService.java</h1><pre class="source lang-java linenums">package fr.sgfv.vehicules.service;
+
+import fr.sgfv.vehicules.dto.*;
+import fr.sgfv.vehicules.entity.Vehicule;
+import fr.sgfv.vehicules.exception.*;
+import fr.sgfv.vehicules.kafka.VehiculeKafkaProducer;
+import fr.sgfv.vehicules.repository.VehiculeRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.*;
+
+@Service
+@RequiredArgsConstructor
+public class VehiculeService {
+
+    private final VehiculeRepository vehiculeRepository;
+    private final VehiculeKafkaProducer kafkaProducer;
+
+<span class="fc" id="L21">    private static final Map&lt;String, List&lt;String&gt;&gt; TRANSITIONS = Map.of(</span>
+<span class="fc" id="L22">        &quot;DISPONIBLE&quot;,     List.of(&quot;EN_MISSION&quot;, &quot;EN_MAINTENANCE&quot;, &quot;EN_PANNE&quot;),</span>
+<span class="fc" id="L23">        &quot;EN_MISSION&quot;,     List.of(&quot;DISPONIBLE&quot;, &quot;EN_PANNE&quot;),</span>
+<span class="fc" id="L24">        &quot;EN_MAINTENANCE&quot;, List.of(&quot;DISPONIBLE&quot;),</span>
+<span class="fc" id="L25">        &quot;EN_PANNE&quot;,       List.of(&quot;EN_MAINTENANCE&quot;, &quot;HORS_SERVICE&quot;),</span>
+<span class="fc" id="L26">        &quot;HORS_SERVICE&quot;,   List.of()</span>
+<span class="fc" id="L27">    );</span>
+
+    public List&lt;VehiculeDTO&gt; listerVehicules(String statut, String marque) {
+        List&lt;Vehicule&gt; vehicules;
+<span class="pc bpc" id="L31" title="1 of 4 branches missed.">        if (statut != null &amp;&amp; marque != null) {</span>
+<span class="nc" id="L32">            vehicules = vehiculeRepository.findByStatutAndMarqueIgnoreCase(statut, marque);</span>
+<span class="pc bfc" id="L33" title="All 2 branches covered.">        } else if (statut != null) {</span>
+<span class="fc" id="L34">            vehicules = vehiculeRepository.findByStatut(statut);</span>
+<span class="pc bpc" id="L35" title="1 of 2 branches missed.">        } else if (marque != null) {</span>
+<span class="nc" id="L36">            vehicules = vehiculeRepository.findByMarqueIgnoreCase(marque);</span>
+<span class="nc" id="L37">        } else {</span>
+<span class="fc" id="L38">            vehicules = vehiculeRepository.findAll();</span>
+        }
+<span class="fc" id="L40">        return vehicules.stream().map(this::toDTO).toList();</span>
+    }
+
+    public VehiculeDTO getVehicule(UUID id) {
+<span class="fc" id="L44">        return toDTO(findById(id));</span>
+    }
+
+    @Transactional
+    public VehiculeDTO creerVehicule(CreateVehiculeDTO dto) {
+<span class="fc bfc" id="L49" title="All 2 branches covered.">        if (vehiculeRepository.existsByPlaque(dto.getPlaque())) {</span>
+<span class="fc" id="L50">            throw new PlaqueDejaExistanteException(dto.getPlaque());</span>
+        }
+<span class="fc" id="L52">        Vehicule vehicule = Vehicule.builder()</span>
+<span class="fc" id="L53">            .plaque(dto.getPlaque())</span>
+<span class="fc" id="L54">            .marque(dto.getMarque())</span>
+<span class="fc" id="L55">            .modele(dto.getModele())</span>
+<span class="fc" id="L56">            .annee(dto.getAnnee())</span>
+<span class="pc bpc" id="L57" title="1 of 2 branches missed.">            .kilometrage(dto.getKilometrage() != null ? dto.getKilometrage() : 0)</span>
+<span class="fc" id="L58">            .statut(&quot;DISPONIBLE&quot;)</span>
+<span class="fc" id="L59">            .build();</span>
+<span class="fc" id="L60">        Vehicule saved = vehiculeRepository.save(vehicule);</span>
+<span class="fc" id="L61">        kafkaProducer.envoyerVehiculeCreated(saved);</span>
+<span class="fc" id="L62">        return toDTO(saved);</span>
+    }
+
+    @Transactional
+    public VehiculeDTO modifierVehicule(UUID id, UpdateVehiculeDTO dto) {
+<span class="fc" id="L67">        Vehicule vehicule = findById(id);</span>
+<span class="fc bfc" id="L68" title="All 2 branches covered.">        if (&quot;HORS_SERVICE&quot;.equals(vehicule.getStatut())) {</span>
+<span class="fc" id="L69">            throw new VehiculeHorsServiceException();</span>
+        }
+<span class="pc bpc" id="L71" title="1 of 2 branches missed.">        if (dto.getKilometrage() != null &amp;&amp;</span>
+<span class="fc bfc" id="L72" title="All 2 branches covered.">            dto.getKilometrage() &lt; vehicule.getKilometrage()) {</span>
+<span class="fc" id="L73">            throw new KilometrageInvalideException(</span>
+<span class="fc" id="L74">                vehicule.getKilometrage(), dto.getKilometrage());</span>
+        }
+<span class="pc bpc" id="L76" title="1 of 2 branches missed.">        if (dto.getMarque() != null)      vehicule.setMarque(dto.getMarque());</span>
+<span class="pc bpc" id="L77" title="1 of 2 branches missed.">        if (dto.getModele() != null)      vehicule.setModele(dto.getModele());</span>
+<span class="pc bpc" id="L78" title="1 of 2 branches missed.">        if (dto.getAnnee() != null)       vehicule.setAnnee(dto.getAnnee());</span>
+<span class="pc bpc" id="L79" title="1 of 2 branches missed.">        if (dto.getKilometrage() != null) vehicule.setKilometrage(dto.getKilometrage());</span>
+<span class="fc" id="L80">        return toDTO(vehiculeRepository.save(vehicule));</span>
+    }
+
+    @Transactional
+    public VehiculeDTO changerStatut(UUID id, ChangerStatutDTO dto) {
+<span class="fc" id="L85">        Vehicule vehicule = findById(id);</span>
+<span class="fc" id="L86">        String statutActuel = vehicule.getStatut();</span>
+<span class="fc" id="L87">        String nouveauStatut = dto.getStatut();</span>
+<span class="fc bfc" id="L88" title="All 2 branches covered.">        if (!TRANSITIONS.get(statutActuel).contains(nouveauStatut)) {</span>
+<span class="fc" id="L89">            throw new TransitionStatutInvalideException(statutActuel, nouveauStatut);</span>
+        }
+<span class="fc" id="L91">        String statutPrecedent = vehicule.getStatut();</span>
+<span class="fc" id="L92">        vehicule.setStatut(nouveauStatut);</span>
+<span class="fc" id="L93">        Vehicule saved = vehiculeRepository.save(vehicule);</span>
+<span class="fc" id="L94">        kafkaProducer.envoyerStatutChange(saved, statutPrecedent);</span>
+<span class="fc" id="L95">        return toDTO(saved);</span>
+    }
+
+    @Transactional
+    public VehiculeDTO assignerConducteur(UUID id, AssignerVehiculeDTO dto) {
+<span class="fc" id="L100">        Vehicule vehicule = findById(id);</span>
+<span class="fc bfc" id="L101" title="All 2 branches covered.">        if (!&quot;DISPONIBLE&quot;.equals(vehicule.getStatut())) {</span>
+<span class="fc" id="L102">            throw new IllegalStateException(</span>
+<span class="fc" id="L103">                &quot;Le véhicule doit être DISPONIBLE pour être assigné&quot;);</span>
+        }
+<span class="fc" id="L105">        vehicule.setConducteurAssigneId(dto.getConducteurId());</span>
+<span class="fc" id="L106">        Vehicule saved = vehiculeRepository.save(vehicule);</span>
+<span class="fc" id="L107">        kafkaProducer.envoyerVehiculeAssigned(saved);</span>
+<span class="fc" id="L108">        return toDTO(saved);</span>
+    }
+
+    @Transactional
+    public VehiculeDTO archiverVehicule(UUID id) {
+<span class="fc" id="L113">        Vehicule vehicule = findById(id);</span>
+<span class="fc" id="L114">        vehicule.setStatut(&quot;HORS_SERVICE&quot;);</span>
+<span class="fc" id="L115">        vehicule.setConducteurAssigneId(null);</span>
+<span class="fc" id="L116">        Vehicule saved = vehiculeRepository.save(vehicule);</span>
+<span class="fc" id="L117">        kafkaProducer.envoyerVehiculeArchived(saved);</span>
+<span class="fc" id="L118">        return toDTO(saved);</span>
+    }
+
+    private Vehicule findById(UUID id) {
+<span class="fc" id="L122">        return vehiculeRepository.findById(id)</span>
+<span class="fc" id="L123">            .orElseThrow(() -&gt; new VehiculeNotFoundException(id));</span>
+    }
+
+    private VehiculeDTO toDTO(Vehicule v) {
+<span class="fc" id="L127">        return VehiculeDTO.builder()</span>
+<span class="fc" id="L128">            .id(v.getId())</span>
+<span class="fc" id="L129">            .plaque(v.getPlaque())</span>
+<span class="fc" id="L130">            .marque(v.getMarque())</span>
+<span class="fc" id="L131">            .modele(v.getModele())</span>
+<span class="fc" id="L132">            .annee(v.getAnnee())</span>
+<span class="fc" id="L133">            .kilometrage(v.getKilometrage())</span>
+<span class="fc" id="L134">            .statut(v.getStatut())</span>
+<span class="fc" id="L135">            .conducteurAssigneId(v.getConducteurAssigneId())</span>
+<span class="fc" id="L136">            .dateAjout(v.getDateAjout())</span>
+<span class="fc" id="L137">            .dateModification(v.getDateModification())</span>
+<span class="fc" id="L138">            .build();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

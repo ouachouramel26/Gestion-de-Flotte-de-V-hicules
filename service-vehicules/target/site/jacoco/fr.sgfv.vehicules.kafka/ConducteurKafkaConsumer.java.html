@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="fr"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ConducteurKafkaConsumer.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">service-vehicules</a> &gt; <a href="index.source.html" class="el_package">fr.sgfv.vehicules.kafka</a> &gt; <span class="el_source">ConducteurKafkaConsumer.java</span></div><h1>ConducteurKafkaConsumer.java</h1><pre class="source lang-java linenums">package fr.sgfv.vehicules.kafka;
+
+import fr.sgfv.vehicules.repository.VehiculeRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Map;
+import java.util.UUID;
+
+<span class="fc" id="L13">@Slf4j</span>
+@Component
+@RequiredArgsConstructor
+public class ConducteurKafkaConsumer {
+
+    private final VehiculeRepository vehiculeRepository;
+
+    @KafkaListener(
+        topics = &quot;conducteurs&quot;,
+        groupId = &quot;service-vehicules&quot;,
+        containerFactory = &quot;kafkaListenerContainerFactory&quot;
+    )
+    @Transactional
+    public void consommer(Map&lt;String, Object&gt; message) {
+<span class="fc" id="L27">        String event = (String) message.get(&quot;event&quot;);</span>
+<span class="pc bpc" id="L28" title="1 of 2 branches missed.">        if (event == null) {</span>
+<span class="nc" id="L29">            log.warn(&quot;[Kafka] Message sans champ 'event' — ignoré&quot;);</span>
+<span class="nc" id="L30">            return;</span>
+        }
+
+<span class="fc" id="L33">        log.info(&quot;[Kafka] Événement reçu : {}&quot;, event);</span>
+
+<span class="pc bpc" id="L35" title="1 of 4 branches missed.">        switch (event) {</span>
+<span class="fc" id="L36">            case &quot;conducteur.assigned&quot;    -&gt; traiterAssigned(message);</span>
+<span class="fc" id="L37">            case &quot;conducteur.unassigned&quot;  -&gt; traiterUnassigned(message);</span>
+<span class="fc" id="L38">            case &quot;conducteur.deactivated&quot; -&gt; traiterDeactivated(message);</span>
+<span class="nc" id="L39">            default -&gt; log.debug(&quot;[Kafka] {} ignoré par service-vehicules&quot;, event);</span>
+        }
+<span class="fc" id="L41">    }</span>
+
+    private void traiterAssigned(Map&lt;String, Object&gt; message) {
+        try {
+<span class="fc" id="L45">            UUID vehiculeId   = UUID.fromString((String) message.get(&quot;vehicule_id&quot;));</span>
+<span class="fc" id="L46">            UUID conducteurId = UUID.fromString((String) message.get(&quot;conducteur_id&quot;));</span>
+
+<span class="fc" id="L48">            vehiculeRepository.findById(vehiculeId).ifPresentOrElse(</span>
+<span class="fc" id="L49">                v -&gt; {</span>
+<span class="fc" id="L50">                    v.setConducteurAssigneId(conducteurId);</span>
+<span class="fc" id="L51">                    vehiculeRepository.save(v);</span>
+<span class="fc" id="L52">                    log.info(&quot;[Kafka] conducteur.assigned — véhicule {} → conducteur {}&quot;,</span>
+<span class="fc" id="L53">                        vehiculeId, conducteurId);</span>
+<span class="fc" id="L54">                },</span>
+<span class="pc" id="L55">                () -&gt; log.warn(&quot;[Kafka] conducteur.assigned — véhicule {} introuvable&quot;,</span>
+<span class="nc" id="L56">                    vehiculeId)</span>
+            );
+<span class="pc" id="L58">        } catch (Exception e) {</span>
+<span class="nc" id="L59">            log.error(&quot;[Kafka] Erreur conducteur.assigned : {}&quot;, e.getMessage());</span>
+        }
+<span class="fc" id="L61">    }</span>
+
+    private void traiterUnassigned(Map&lt;String, Object&gt; message) {
+        try {
+<span class="fc" id="L65">            UUID vehiculeId = UUID.fromString((String) message.get(&quot;vehicule_id&quot;));</span>
+
+<span class="fc" id="L67">            vehiculeRepository.findById(vehiculeId).ifPresentOrElse(</span>
+<span class="fc" id="L68">                v -&gt; {</span>
+<span class="fc" id="L69">                    v.setConducteurAssigneId(null);</span>
+<span class="fc" id="L70">                    vehiculeRepository.save(v);</span>
+<span class="fc" id="L71">                    log.info(&quot;[Kafka] conducteur.unassigned — véhicule {} libéré&quot;,</span>
+<span class="fc" id="L72">                        vehiculeId);</span>
+<span class="fc" id="L73">                },</span>
+<span class="pc" id="L74">                () -&gt; log.warn(&quot;[Kafka] conducteur.unassigned — véhicule {} introuvable&quot;,</span>
+<span class="nc" id="L75">                    vehiculeId)</span>
+            );
+<span class="pc" id="L77">        } catch (Exception e) {</span>
+<span class="nc" id="L78">            log.error(&quot;[Kafka] Erreur conducteur.unassigned : {}&quot;, e.getMessage());</span>
+        }
+<span class="fc" id="L80">    }</span>
+
+    private void traiterDeactivated(Map&lt;String, Object&gt; message) {
+        try {
+<span class="fc" id="L84">            Object vehiculeIdObj = message.get(&quot;vehicule_assigne_id&quot;);</span>
+<span class="pc bpc" id="L85" title="1 of 2 branches missed.">            if (vehiculeIdObj == null) {</span>
+<span class="nc" id="L86">                log.debug(&quot;[Kafka] conducteur.deactivated — aucun véhicule assigné&quot;);</span>
+<span class="nc" id="L87">                return;</span>
+            }
+
+<span class="fc" id="L90">            UUID vehiculeId = UUID.fromString((String) vehiculeIdObj);</span>
+
+<span class="fc" id="L92">            vehiculeRepository.findById(vehiculeId).ifPresentOrElse(</span>
+<span class="fc" id="L93">                v -&gt; {</span>
+<span class="fc" id="L94">                    v.setConducteurAssigneId(null);</span>
+<span class="fc" id="L95">                    vehiculeRepository.save(v);</span>
+<span class="fc" id="L96">                    log.info(&quot;[Kafka] conducteur.deactivated — véhicule {} libéré&quot;,</span>
+<span class="fc" id="L97">                        vehiculeId);</span>
+<span class="fc" id="L98">                },</span>
+<span class="pc" id="L99">                () -&gt; log.warn(&quot;[Kafka] conducteur.deactivated — véhicule {} introuvable&quot;,</span>
+<span class="nc" id="L100">                    vehiculeId)</span>
+            );
+<span class="pc" id="L102">        } catch (Exception e) {</span>
+<span class="nc" id="L103">            log.error(&quot;[Kafka] Erreur conducteur.deactivated : {}&quot;, e.getMessage());</span>
+        }
+<span class="fc" id="L105">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

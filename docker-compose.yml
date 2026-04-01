@@ -1,0 +1,495 @@
+version: '3.8'
+
+# ================================================================
+# PORTS — alignés avec les fichiers Swagger
+# service-vehicules    : 8081
+# service-conducteurs  : 8082
+# service-maintenance  : 8083
+# service-localisation : 8084 (REST) + 3001 (gRPC/WebSocket)
+# service-alertes      : 3002
+# Keycloak             : 8180 (évite conflit avec les services)
+# Kafka UI             : 8090
+# Grafana              : 3000
+# Prometheus           : 9090
+# Jaeger               : 16686
+# ================================================================
+
+services:
+
+  # ─────────────────────────────────────────────────────────────
+  # BASES DE DONNÉES
+  # ─────────────────────────────────────────────────────────────
+
+  postgres-vehicules:
+    image: postgres:15-alpine
+    container_name: postgres-vehicules
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: vehicules_db
+      POSTGRES_USER: sgfv            # CORRECTION : fleet_user → sgfv
+      POSTGRES_PASSWORD: sgfv_secret # CORRECTION : fleet_secret → sgfv_secret
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-vehicules-data:/var/lib/postgresql/data
+      - ./service-vehicules/src/main/resources/migrations:/docker-entrypoint-initdb.d
+    networks:
+      - fleet-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sgfv -d vehicules_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-conducteurs:
+    image: postgres:15-alpine
+    container_name: postgres-conducteurs
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: conducteurs_db
+      POSTGRES_USER: sgfv
+      POSTGRES_PASSWORD: sgfv_secret
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-conducteurs-data:/var/lib/postgresql/data
+      - ./service-conducteurs/src/main/resources/migrations:/docker-entrypoint-initdb.d
+    networks:
+      - fleet-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sgfv -d conducteurs_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-maintenance:
+    image: postgres:15-alpine
+    container_name: postgres-maintenance
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: maintenance_db
+      POSTGRES_USER: sgfv
+      POSTGRES_PASSWORD: sgfv_secret
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres-maintenance-data:/var/lib/postgresql/data
+      - ./service-maintenance/src/main/resources/migrations:/docker-entrypoint-initdb.d
+    networks:
+      - fleet-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sgfv -d maintenance_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # CORRECTION : postgres-evenements → postgres-alertes
+  postgres-alertes:
+    image: postgres:15-alpine
+    container_name: postgres-alertes
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: alertes_db        # CORRECTION : evenements_db → alertes_db
+      POSTGRES_USER: sgfv
+      POSTGRES_PASSWORD: sgfv_secret
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres-alertes-data:/var/lib/postgresql/data
+      # service-alertes est Node.js → chemin src/migrations
+      - ./service-alertes/src/migrations:/docker-entrypoint-initdb.d
+    networks:
+      - fleet-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sgfv -d alertes_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # TimescaleDB pour la localisation GPS
+  postgres-localisation:
+    image: timescale/timescaledb:latest-pg15
+    container_name: postgres-localisation
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: localisation_db
+      POSTGRES_USER: sgfv
+      POSTGRES_PASSWORD: sgfv_secret
+    ports:
+      - "5436:5432"
+    volumes:
+      - postgres-localisation-data:/var/lib/postgresql/data
+      # CORRECTION : service-localisation est Node.js → pas src/main/resources
+      - ./service-localisation/src/migrations:/docker-entrypoint-initdb.d
+    networks:
+      - fleet-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sgfv -d localisation_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────────────────────────
+  # REDIS — Cache sessions et données fréquentes
+  # ─────────────────────────────────────────────────────────────
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - fleet-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────────────────────────
+  # KAFKA — Messagerie entre services
+  # ─────────────────────────────────────────────────────────────
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: zookeeper
+    restart: unless-stopped
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    volumes:
+      - zookeeper-data:/var/lib/zookeeper/data
+      - zookeeper-logs:/var/lib/zookeeper/log
+    networks:
+      - fleet-network
+    # Healthcheck supprimé pour éviter les faux négatifs sur Windows
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka
+    restart: unless-stopped
+    depends_on:
+      zookeeper:
+        condition: service_started
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092
+      # PLAINTEXT      = accès depuis les conteneurs (kafka:29092)
+      # PLAINTEXT_HOST = accès depuis ta machine (localhost:9092)
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      # AJOUT : précréation des 5 topics SGFV (correspondant aux AsyncAPI)
+      KAFKA_CREATE_TOPICS: "vehicules:1:1,conducteurs:1:1,maintenance:1:1,locations:1:1,utilisateurs:1:1"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    networks:
+      - fleet-network
+    # Healthcheck simplifié
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_started
+    ports:
+      - "8090:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: sgfv-cluster
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+    networks:
+      - fleet-network
+
+  # ─────────────────────────────────────────────────────────────
+  # KEYCLOAK — Authentification et gestion des rôles
+  # ─────────────────────────────────────────────────────────────
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    container_name: keycloak
+    restart: unless-stopped
+    command: start-dev --import-realm
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin123
+      KC_HTTP_PORT: 8180
+      KC_HOSTNAME_STRICT: "false"
+      KC_HOSTNAME_STRICT_HTTPS: "false"
+      KC_HTTP_ENABLED: "true"
+    ports:
+      - "8180:8180"
+    volumes:
+      # CORRECTION : keycloak-realm.json → realm-export.json
+      - ./realm-export.json:/opt/keycloak/data/import/realm-export.json
+    networks:
+      - fleet-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8180/health/ready || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 10
+
+  # ─────────────────────────────────────────────────────────────
+  # OBSERVABILITÉ
+  # ─────────────────────────────────────────────────────────────
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: otel-collector
+    restart: unless-stopped
+    command: ["--config=/etc/otel-collector-config.yml"]
+    volumes:
+      - ./infrastructure/otel/otel-collector-config.yml:/etc/otel-collector-config.yml
+    ports:
+      - "4317:4317"   # gRPC
+      - "4318:4318"   # HTTP
+      - "8888:8888"   # métriques internes
+    depends_on:
+      - jaeger
+      - prometheus
+      - loki
+    networks:
+      - fleet-network
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.52
+    container_name: jaeger
+    restart: unless-stopped
+    ports:
+      - "16686:16686"  # http://localhost:16686
+      - "14250:14250"
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    networks:
+      - fleet-network
+
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"   # http://localhost:9090
+    volumes:
+      - ./infrastructure/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.enable-lifecycle"
+    networks:
+      - fleet-network
+
+  loki:
+    image: grafana/loki:2.9.0
+    container_name: loki
+    restart: unless-stopped
+    ports:
+      - "3100:3100"
+    volumes:
+      - loki-data:/loki
+    networks:
+      - fleet-network
+
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: grafana
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+      - loki
+      - jaeger
+    ports:
+      - "3000:3000"   # http://localhost:3000 — admin/admin123
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin123
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./infrastructure/grafana/provisioning:/etc/grafana/provisioning
+    networks:
+      - fleet-network
+
+  # ─────────────────────────────────────────────────────────────
+  # MICROSERVICES SGFV — AJOUT : absents du fichier original
+  # ─────────────────────────────────────────────────────────────
+
+  service-vehicules:
+    build:
+      context: ./service-vehicules
+      dockerfile: Dockerfile
+    container_name: sgfv-vehicules
+    restart: on-failure
+    ports:
+      - "8081:8081"
+    environment:
+      SERVER_PORT: 8081
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-vehicules:5432/vehicules_db
+      SPRING_DATASOURCE_USERNAME: sgfv
+      SPRING_DATASOURCE_PASSWORD: sgfv_secret
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      # On force Keycloak 8180 via JWK seulement pour bypasser le mismatch 401
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://keycloak:8180/realms/sgfv/protocol/openid-connect/certs
+      KEYCLOAK_REALM: sgfv
+      KEYCLOAK_RESOURCE: sgfv-backend
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_SERVICE_NAME: service-vehicules
+    depends_on:
+      postgres-vehicules:
+        condition: service_started
+      kafka:
+        condition: service_started
+      keycloak:
+        condition: service_started
+    networks:
+      - fleet-network
+
+  service-conducteurs:
+    build:
+      context: ./service-conducteurs
+      dockerfile: Dockerfile
+    container_name: sgfv-conducteurs
+    restart: on-failure
+    ports:
+      - "8082:8082"
+    environment:
+      SERVER_PORT: 8082
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-conducteurs:5432/conducteurs_db
+      SPRING_DATASOURCE_USERNAME: sgfv
+      SPRING_DATASOURCE_PASSWORD: sgfv_secret
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      # On force Keycloak 8180
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://keycloak:8180/realms/sgfv/protocol/openid-connect/certs
+      KEYCLOAK_REALM: sgfv
+      KEYCLOAK_RESOURCE: sgfv-backend
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_SERVICE_NAME: service-conducteurs
+    depends_on:
+      postgres-conducteurs:
+        condition: service_started
+      kafka:
+        condition: service_started
+      keycloak:
+        condition: service_started
+    networks:
+      - fleet-network
+
+  service-maintenance:
+    build:
+      context: ./service-maintenance
+      dockerfile: Dockerfile
+    container_name: sgfv-maintenance
+    restart: on-failure
+    ports:
+      - "8083:8083"
+    environment:
+      SERVER_PORT: 8083
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-maintenance:5432/maintenance_db
+      SPRING_DATASOURCE_USERNAME: sgfv
+      SPRING_DATASOURCE_PASSWORD: sgfv_secret
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      # On force Keycloak 8180
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://keycloak:8180/realms/sgfv/protocol/openid-connect/certs
+      KEYCLOAK_REALM: sgfv
+      KEYCLOAK_RESOURCE: sgfv-backend
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_SERVICE_NAME: service-maintenance
+    depends_on:
+      postgres-maintenance:
+        condition: service_started
+      kafka:
+        condition: service_started
+      keycloak:
+        condition: service_started
+    networks:
+      - fleet-network
+
+  service-localisation:
+    build:
+      context: ./service-localisation
+      dockerfile: Dockerfile
+    container_name: sgfv-localisation
+    restart: on-failure
+    ports:
+      - "8084:8084"   # REST
+      - "3001:3001"   # gRPC / WebSocket
+    environment:
+      PORT: 8084
+      GRPC_PORT: 3001
+      DATABASE_URL: postgresql://sgfv:sgfv_secret@postgres-localisation:5432/localisation_db
+      KAFKA_BROKERS: kafka:29092
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_REALM: sgfv
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_SERVICE_NAME: service-localisation
+    depends_on:
+      postgres-localisation:
+        condition: service_started
+      kafka:
+        condition: service_started
+      keycloak:
+        condition: service_started
+    networks:
+      - fleet-network
+
+  service-alertes:
+    build:
+      context: ./service-alertes
+      dockerfile: Dockerfile
+    container_name: sgfv-alertes
+    restart: on-failure
+    ports:
+      - "3002:3002"
+    environment:
+      PORT: 3002
+      DATABASE_URL: postgresql://sgfv:sgfv_secret@postgres-alertes:5432/alertes_db
+      KAFKA_BROKERS: kafka:29092
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_REALM: sgfv
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_SERVICE_NAME: service-alertes
+    depends_on:
+      postgres-alertes:
+        condition: service_started
+      kafka:
+        condition: service_started
+      keycloak:
+        condition: service_started
+    networks:
+      - fleet-network
+
+# ═══════════════════════════════════════════════════════════════
+# VOLUMES
+# ═══════════════════════════════════════════════════════════════
+
+volumes:
+  postgres-vehicules-data:
+  postgres-conducteurs-data:
+  postgres-maintenance-data:
+  postgres-localisation-data:
+  postgres-alertes-data:       # CORRECTION : postgres-evenements-data → postgres-alertes-data
+  redis-data:
+  zookeeper-data:
+  zookeeper-logs:
+  kafka-data:
+  prometheus-data:
+  grafana-data:
+  loki-data:
+
+# ═══════════════════════════════════════════════════════════════
+# NETWORKS
+# ═══════════════════════════════════════════════════════════════
+
+networks:
+  fleet-network:
+    driver: bridge

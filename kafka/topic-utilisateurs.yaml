@@ -1,0 +1,196 @@
+asyncapi: 2.6.0
+info:
+  title: Topic utilisateurs
+  version: 1.0.0
+  description: |
+    Producteur   : Keycloak (via event listener)
+    Consommateurs : service-maintenance, service-alertes
+
+    ## Rôle de ce topic
+    Propage les créations, modifications et suppressions de comptes depuis Keycloak.
+    Garantit la cohérence des caches d'utilisateurs dans les services.
+
+    ## Impact des événements
+    | Événement | Consommateur | Action |
+    |---|---|---|
+    | utilisateur.created | service-maintenance | Insère dans la table techniciens (si rôle TECHNICIEN) |
+    | utilisateur.created | service-alertes | Insère dans la table utilisateurs_cache (tous rôles) |
+    | utilisateur.updated | service-maintenance | Met à jour la table techniciens (si rôle TECHNICIEN) |
+    | utilisateur.updated | service-alertes | Met à jour la table utilisateurs_cache (tous rôles) |
+    | utilisateur.deleted | service-maintenance | Supprime de la table techniciens (si rôle TECHNICIEN) |
+    | utilisateur.deleted | service-alertes | Supprime de la table utilisateurs_cache |
+
+servers:
+  kafka-local:
+    url: localhost:9092
+    protocol: kafka
+    description: Broker Kafka local (Docker)
+
+channels:
+  utilisateurs:
+    description: Événements de gestion des comptes utilisateurs depuis Keycloak
+    publish:
+      operationId: publierEvenementUtilisateur
+      summary: Publier un événement utilisateur
+      message:
+        oneOf:
+          - $ref: '#/components/messages/UtilisateurCreated'
+          - $ref: '#/components/messages/UtilisateurUpdated'
+          - $ref: '#/components/messages/UtilisateurDeleted'
+
+components:
+  messages:
+
+    UtilisateurCreated:
+      name: utilisateur.created
+      title: Compte utilisateur créé
+      contentType: application/json
+      summary: Émis à la création d'un compte dans Keycloak
+      description: |
+        Déclenche dans service-maintenance : insertion dans la table techniciens
+        si le rôle est TECHNICIEN.
+        Déclenche dans service-alertes : insertion dans utilisateurs_cache
+        pour tous les rôles.
+      payload:
+        type: object
+        required: [event, keycloak_id, prenom, nom, email, role, horodatage]
+        properties:
+          event:
+            type: string
+            const: utilisateur.created
+          keycloak_id:
+            type: string
+            description: Identifiant interne Keycloak
+          prenom:
+            type: string
+          nom:
+            type: string
+          email:
+            type: string
+          role:
+            type: string
+            enum: [CONDUCTEUR, TECHNICIEN, ADMIN]
+          horodatage:
+            type: string
+            format: date-time
+      examples:
+        - name: Création du technicien Lynda Hamitouche
+          payload:
+            event: "utilisateur.created"
+            keycloak_id: "af3b3772-9745-4a78-b4c4-62c61823bb9a"
+            prenom: "Lynda"
+            nom: "Hamitouche"
+            email: "tech@sgfv.fr"
+            role: "TECHNICIEN"
+            horodatage: "2024-03-15T09:00:00Z"
+        - name: Création du conducteur Amel Ouachour
+          payload:
+            event: "utilisateur.created"
+            keycloak_id: "2818cd1e-45b7-4a21-a878-1fcf6ba8aa58"
+            prenom: "Amel"
+            nom: "Ouachour"
+            email: "conducteur@sgfv.fr"
+            role: "CONDUCTEUR"
+            horodatage: "2024-03-15T09:05:00Z"
+        - name: Création d'un administrateur
+          payload:
+            event: "utilisateur.created"
+            keycloak_id: "9f4c1234-ab56-7890-cd12-ef3456789012"
+            prenom: "Admin"
+            nom: "SGFV"
+            email: "admin@sgfv.fr"
+            role: "ADMIN"
+            horodatage: "2024-03-15T08:00:00Z"
+
+    UtilisateurUpdated:
+      name: utilisateur.updated
+      title: Compte utilisateur modifié
+      contentType: application/json
+      summary: Émis à chaque modification d'un compte Keycloak
+      description: |
+        Tous les champs sauf keycloak_id et horodatage sont optionnels —
+        seuls les champs modifiés sont inclus dans le message.
+        Déclenche la mise à jour des caches dans service-maintenance et service-alertes.
+      payload:
+        type: object
+        required: [event, keycloak_id, horodatage]
+        properties:
+          event:
+            type: string
+            const: utilisateur.updated
+          keycloak_id:
+            type: string
+            description: Identifiant Keycloak — clé de mise à jour dans les caches
+          prenom:
+            type: string
+          nom:
+            type: string
+          email:
+            type: string
+          role:
+            type: string
+            enum: [CONDUCTEUR, TECHNICIEN, ADMIN]
+          horodatage:
+            type: string
+            format: date-time
+      examples:
+        - name: Mise à jour email d'un technicien
+          payload:
+            event: "utilisateur.updated"
+            keycloak_id: "af3b3772-9745-4a78-b4c4-62c61823bb9a"
+            prenom: "Lynda"
+            nom: "Hamitouche"
+            email: "l.hamitouche@sgfv.fr"
+            role: "TECHNICIEN"
+            horodatage: "2024-03-20T14:00:00Z"
+        - name: Changement de rôle CONDUCTEUR vers TECHNICIEN
+          payload:
+            event: "utilisateur.updated"
+            keycloak_id: "2818cd1e-45b7-4a21-a878-1fcf6ba8aa58"
+            prenom: "Amel"
+            nom: "Ouachour"
+            email: "conducteur@sgfv.fr"
+            role: "TECHNICIEN"
+            horodatage: "2024-03-21T10:00:00Z"
+
+    UtilisateurDeleted:
+      name: utilisateur.deleted
+      title: Compte utilisateur supprimé
+      contentType: application/json
+      summary: Émis à la suppression d'un compte dans Keycloak (Admin uniquement)
+      description: |
+        Déclenche dans service-maintenance : suppression de la table techniciens
+        si le rôle était TECHNICIEN.
+        Déclenche dans service-alertes : suppression de utilisateurs_cache.
+        Note : un technicien avec des maintenances EN_COURS ne devrait pas
+        être supprimé — à valider côté métier avant suppression dans Keycloak.
+      payload:
+        type: object
+        required: [event, keycloak_id, role, horodatage]
+        properties:
+          event:
+            type: string
+            const: utilisateur.deleted
+          keycloak_id:
+            type: string
+            description: Identifiant Keycloak du compte supprimé
+          role:
+            type: string
+            enum: [CONDUCTEUR, TECHNICIEN, ADMIN]
+            description: Rôle du compte supprimé — nécessaire pour cibler le bon cache
+          horodatage:
+            type: string
+            format: date-time
+      examples:
+        - name: Suppression d'un technicien
+          payload:
+            event: "utilisateur.deleted"
+            keycloak_id: "af3b3772-9745-4a78-b4c4-62c61823bb9a"
+            role: "TECHNICIEN"
+            horodatage: "2024-03-25T09:00:00Z"
+        - name: Suppression d'un conducteur
+          payload:
+            event: "utilisateur.deleted"
+            keycloak_id: "2818cd1e-45b7-4a21-a878-1fcf6ba8aa58"
+            role: "CONDUCTEUR"
+            horodatage: "2024-03-25T09:05:00Z"

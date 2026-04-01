@@ -1,0 +1,229 @@
+asyncapi: 2.6.0
+info:
+  title: Topic maintenance
+  version: 1.0.0
+  description: |
+    Producteur   : service-maintenance (port 8083)
+    Consommateurs : service-vehicules, service-alertes
+
+    ## Rôle de ce topic
+    Propage le cycle de vie complet des interventions techniques.
+    service-vehicules consomme pour mettre à jour le statut des véhicules.
+    service-alertes consomme pour créer les alertes correspondantes.
+
+    ## Impact des événements sur les véhicules
+    | Événement | Statut véhicule après | Alerte créée |
+    |---|---|---|
+    | maintenance.signaled | EN_PANNE | PANNE_SIGNALEE (URGENCE → TECHNICIEN) |
+    | maintenance.planned | EN_PANNE (inchangé) | REVISION_PLANIFIEE (INFO → TECHNICIEN) |
+    | maintenance.started | EN_MAINTENANCE | — |
+    | maintenance.completed | DISPONIBLE | MAINTENANCE_TERMINEE (INFO → ADMIN) |
+    | maintenance.cancelled | DISPONIBLE | — |
+
+servers:
+  kafka-local:
+    url: localhost:9092
+    protocol: kafka
+    description: Broker Kafka local (Docker)
+
+channels:
+  maintenance:
+    description: Tous les événements liés aux interventions techniques
+    publish:
+      operationId: publierEvenementMaintenance
+      summary: Publier un événement maintenance
+      message:
+        oneOf:
+          - $ref: '#/components/messages/MaintenanceSignaled'
+          - $ref: '#/components/messages/MaintenancePlanned'
+          - $ref: '#/components/messages/MaintenanceStarted'
+          - $ref: '#/components/messages/MaintenanceCompleted'
+          - $ref: '#/components/messages/MaintenanceCancelled'
+
+components:
+  messages:
+
+    MaintenanceSignaled:
+      name: maintenance.signaled
+      title: Intervention signalée
+      contentType: application/json
+      summary: Émis quand une panne est signalée sur un véhicule
+      description: |
+        Déclenche via service-vehicules : véhicule → EN_PANNE
+        Déclenche via service-alertes : alerte PANNE_SIGNALEE niveau URGENCE
+      payload:
+        type: object
+        required: [event, maintenance_id, vehicule_id, type_intervention, horodatage]
+        properties:
+          event:
+            type: string
+            const: maintenance.signaled
+          maintenance_id:
+            type: string
+            format: uuid
+          vehicule_id:
+            type: string
+            format: uuid
+          type_intervention:
+            type: string
+            description: Nature de la panne ou intervention
+          horodatage:
+            type: string
+            format: date-time
+      examples:
+        - name: Panne moteur signalée
+          payload:
+            event: "maintenance.signaled"
+            maintenance_id: "770e8400-e29b-41d4-a716-446655440001"
+            vehicule_id: "550e8400-e29b-41d4-a716-446655440002"
+            type_intervention: "Réparation moteur"
+            horodatage: "2024-03-15T09:00:00Z"
+
+    MaintenancePlanned:
+      name: maintenance.planned
+      title: Intervention planifiée
+      contentType: application/json
+      summary: Émis quand une date et un technicien sont assignés à l'intervention
+      description: |
+        Déclenche via service-alertes : alerte REVISION_PLANIFIEE niveau INFO
+        destinée au technicien.
+      payload:
+        type: object
+        required: [event, maintenance_id, vehicule_id, technicien_id, date_planifiee, horodatage]
+        properties:
+          event:
+            type: string
+            const: maintenance.planned
+          maintenance_id:
+            type: string
+            format: uuid
+          vehicule_id:
+            type: string
+            format: uuid
+          technicien_id:
+            type: string
+            format: uuid
+            description: ID du technicien assigné à l'intervention
+          date_planifiee:
+            type: string
+            format: date-time
+          horodatage:
+            type: string
+            format: date-time
+      examples:
+        - name: Maintenance planifiée dans 7 jours
+          payload:
+            event: "maintenance.planned"
+            maintenance_id: "770e8400-e29b-41d4-a716-446655440001"
+            vehicule_id: "550e8400-e29b-41d4-a716-446655440002"
+            technicien_id: "880e8400-e29b-41d4-a716-446655440001"
+            date_planifiee: "2024-03-22T08:00:00Z"
+            horodatage: "2024-03-15T10:00:00Z"
+
+    MaintenanceStarted:
+      name: maintenance.started
+      title: Intervention démarrée
+      contentType: application/json
+      summary: Émis quand un technicien commence l'intervention
+      description: |
+        Déclenche via service-vehicules : véhicule → EN_MAINTENANCE
+      payload:
+        type: object
+        required: [event, maintenance_id, vehicule_id, horodatage]
+        properties:
+          event:
+            type: string
+            const: maintenance.started
+          maintenance_id:
+            type: string
+            format: uuid
+          vehicule_id:
+            type: string
+            format: uuid
+          horodatage:
+            type: string
+            format: date-time
+      examples:
+        - name: Début de l'intervention
+          payload:
+            event: "maintenance.started"
+            maintenance_id: "770e8400-e29b-41d4-a716-446655440001"
+            vehicule_id: "550e8400-e29b-41d4-a716-446655440002"
+            horodatage: "2024-03-22T08:05:00Z"
+
+    MaintenanceCompleted:
+      name: maintenance.completed
+      title: Intervention terminée
+      contentType: application/json
+      summary: Émis quand l'intervention est clôturée avec succès
+      description: |
+        Déclenche via service-vehicules : véhicule → DISPONIBLE
+        Déclenche via service-alertes : alerte MAINTENANCE_TERMINEE niveau INFO
+        destinée à l'Admin.
+      payload:
+        type: object
+        required: [event, maintenance_id, vehicule_id, horodatage]
+        properties:
+          event:
+            type: string
+            const: maintenance.completed
+          maintenance_id:
+            type: string
+            format: uuid
+          vehicule_id:
+            type: string
+            format: uuid
+          cout:
+            type: number
+            nullable: true
+            description: Coût de l'intervention en euros
+          horodatage:
+            type: string
+            format: date-time
+      examples:
+        - name: Intervention terminée avec coût
+          payload:
+            event: "maintenance.completed"
+            maintenance_id: "770e8400-e29b-41d4-a716-446655440001"
+            vehicule_id: "550e8400-e29b-41d4-a716-446655440002"
+            cout: 450.00
+            horodatage: "2024-03-22T17:00:00Z"
+        - name: Intervention terminée sans coût renseigné
+          payload:
+            event: "maintenance.completed"
+            maintenance_id: "770e8400-e29b-41d4-a716-446655440003"
+            vehicule_id: "550e8400-e29b-41d4-a716-446655440003"
+            cout: null
+            horodatage: "2024-03-22T15:30:00Z"
+
+    MaintenanceCancelled:
+      name: maintenance.cancelled
+      title: Intervention annulée
+      contentType: application/json
+      summary: Émis quand une intervention SIGNALEE ou PLANIFIEE est annulée
+      description: |
+        Déclenche via service-vehicules : véhicule → DISPONIBLE
+        Impossible d'annuler une maintenance EN_COURS ou TERMINEE.
+      payload:
+        type: object
+        required: [event, maintenance_id, vehicule_id, horodatage]
+        properties:
+          event:
+            type: string
+            const: maintenance.cancelled
+          maintenance_id:
+            type: string
+            format: uuid
+          vehicule_id:
+            type: string
+            format: uuid
+          horodatage:
+            type: string
+            format: date-time
+      examples:
+        - name: Annulation d'une maintenance planifiée
+          payload:
+            event: "maintenance.cancelled"
+            maintenance_id: "770e8400-e29b-41d4-a716-446655440002"
+            vehicule_id: "550e8400-e29b-41d4-a716-446655440001"
+            horodatage: "2024-03-16T11:00:00Z"

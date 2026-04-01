@@ -1,0 +1,201 @@
+asyncapi: 2.6.0
+info:
+  title: Topic locations
+  version: 1.0.0
+  description: |
+    Producteur   : service-localisation (port 8084)
+    Consommateurs : service-alertes
+
+    ## Rôle de ce topic
+    Propage les événements GPS en temps réel.
+    Seuls les véhicules EN_MISSION génèrent des positions.
+    Fréquence : 1 position toutes les 10 secondes par véhicule.
+
+    ## Impact des événements
+    | Événement | Alerte créée dans service-alertes |
+    |---|---|
+    | location.updated | Aucune alerte — mise à jour du cache uniquement |
+    | geofence.alert | SORTIE_ZONE niveau URGENCE → destinataire ADMIN |
+    | vitesse.excessive | VITESSE_EXCESSIVE niveau CRITIQUE → destinataire ADMIN |
+
+servers:
+  kafka-local:
+    url: localhost:9092
+    protocol: kafka
+    description: Broker Kafka local (Docker)
+
+channels:
+  locations:
+    description: Événements GPS — positions, géofencing, vitesse excessive
+    publish:
+      operationId: publierEvenementLocalisation
+      summary: Publier un événement de localisation
+      message:
+        oneOf:
+          - $ref: '#/components/messages/LocationUpdated'
+          - $ref: '#/components/messages/GeofenceAlert'
+          - $ref: '#/components/messages/VitesseExcessive'
+
+components:
+  messages:
+
+    LocationUpdated:
+      name: location.updated
+      title: Position GPS enregistrée
+      contentType: application/json
+      summary: Émis à chaque nouvelle position GPS d'un véhicule EN_MISSION
+      description: |
+        Publié toutes les 10 secondes par véhicule EN_MISSION.
+        Après publication, le service-localisation vérifie
+        automatiquement le géofencing contre toutes les zones actives.
+      payload:
+        type: object
+        required: [event, vehicule_id, latitude, longitude, horodatage]
+        properties:
+          event:
+            type: string
+            const: location.updated
+          vehicule_id:
+            type: string
+            format: uuid
+          latitude:
+            type: number
+            format: double
+            minimum: -90
+            maximum: 90
+          longitude:
+            type: number
+            format: double
+            minimum: -180
+            maximum: 180
+          vitesse:
+            type: number
+            minimum: 0
+            description: Vitesse en km/h
+          direction:
+            type: number
+            minimum: 0
+            maximum: 360
+            description: Direction en degrés (0 = Nord, 90 = Est)
+          horodatage:
+            type: string
+            format: date-time
+      examples:
+        - name: Position normale à Rouen
+          payload:
+            event: "location.updated"
+            vehicule_id: "550e8400-e29b-41d4-a716-446655440002"
+            latitude: 49.4431
+            longitude: 1.0993
+            vitesse: 52.5
+            direction: 90.0
+            horodatage: "2024-03-15T14:00:00Z"
+        - name: Véhicule à l'arrêt
+          payload:
+            event: "location.updated"
+            vehicule_id: "550e8400-e29b-41d4-a716-446655440003"
+            latitude: 48.8566
+            longitude: 2.3522
+            vitesse: 0.0
+            direction: 0.0
+            horodatage: "2024-03-15T14:00:10Z"
+
+    GeofenceAlert:
+      name: geofence.alert
+      title: Alerte géofencing — zone interdite franchie
+      contentType: application/json
+      summary: Émis quand un véhicule entre dans une zone INTERDITE
+      description: |
+        Déclenche dans service-alertes : alerte SORTIE_ZONE
+        niveau URGENCE destinée à l'Admin.
+        Zones INTERDITES définies par l'Admin via service-localisation.
+      payload:
+        type: object
+        required: [event, vehicule_id, zone_id, zone_nom, latitude, longitude, horodatage]
+        properties:
+          event:
+            type: string
+            const: geofence.alert
+          vehicule_id:
+            type: string
+            format: uuid
+          zone_id:
+            type: string
+            format: uuid
+          zone_nom:
+            type: string
+            description: Nom lisible de la zone franchie
+          latitude:
+            type: number
+            format: double
+            description: Position du véhicule au moment de l'alerte
+          longitude:
+            type: number
+            format: double
+          horodatage:
+            type: string
+            format: date-time
+      examples:
+        - name: Véhicule entre en zone industrielle interdite
+          payload:
+            event: "geofence.alert"
+            vehicule_id: "550e8400-e29b-41d4-a716-446655440002"
+            zone_id: "990e8400-e29b-41d4-a716-446655440002"
+            zone_nom: "Zone Industrielle A"
+            latitude: 49.3805
+            longitude: 1.0510
+            horodatage: "2024-03-15T15:30:00Z"
+
+    VitesseExcessive:
+      name: vitesse.excessive
+      title: Vitesse excessive détectée
+      contentType: application/json
+      summary: Émis quand la vitesse d'un véhicule dépasse le seuil configuré
+      description: |
+        Déclenche dans service-alertes : alerte VITESSE_EXCESSIVE
+        niveau CRITIQUE destinée à l'Admin.
+      payload:
+        type: object
+        required: [event, vehicule_id, vitesse_actuelle, vitesse_limite, horodatage]
+        properties:
+          event:
+            type: string
+            const: vitesse.excessive
+          vehicule_id:
+            type: string
+            format: uuid
+          vitesse_actuelle:
+            type: number
+            description: Vitesse mesurée en km/h
+          vitesse_limite:
+            type: number
+            description: Seuil configuré en km/h
+          latitude:
+            type: number
+            format: double
+            description: Position du véhicule au moment de l'alerte
+          longitude:
+            type: number
+            format: double
+          horodatage:
+            type: string
+            format: date-time
+      examples:
+        - name: Véhicule à 145 km/h sur autoroute (limite 130)
+          payload:
+            event: "vitesse.excessive"
+            vehicule_id: "550e8400-e29b-41d4-a716-446655440002"
+            vitesse_actuelle: 145.0
+            vitesse_limite: 130.0
+            latitude: 49.1500
+            longitude: 1.2800
+            horodatage: "2024-03-15T12:45:00Z"
+        - name: Véhicule à 65 km/h en ville (limite 50)
+          payload:
+            event: "vitesse.excessive"
+            vehicule_id: "550e8400-e29b-41d4-a716-446655440003"
+            vitesse_actuelle: 65.0
+            vitesse_limite: 50.0
+            latitude: 49.4431
+            longitude: 1.0993
+            horodatage: "2024-03-15T10:20:00Z"

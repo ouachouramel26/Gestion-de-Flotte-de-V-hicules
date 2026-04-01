@@ -1,0 +1,517 @@
+openapi: 3.0.3
+info:
+  title: service-conducteurs API
+  description: |
+    Gestion des conducteurs avec double dimension statut/disponibilité.
+    
+    ## Règles métier
+    - Email unique dans le système
+    - Numéro de permis unique dans le système
+    - keycloak_id unique — lié au compte Keycloak
+    - Conducteur INACTIF ou SUSPENDU → vehicule_assigne_id forcé à NULL
+    - Conducteur EN_MISSION → ne peut pas être désactivé
+    - Alerte Kafka si permis expire dans moins de 30 jours
+    - Seul l'Admin peut créer ou désactiver un conducteur
+    
+    ## Événements Kafka émis
+    | Événement | Déclencheur |
+    |---|---|
+    | conducteur.created | Création d'un conducteur |
+    | conducteur.assigned | Assignation à un véhicule |
+    | conducteur.unassigned | Fin de mission |
+    | conducteur.deactivated | Désactivation |
+    | conducteur.permis.expiration | Permis expire dans 30 jours |
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8082
+    description: Environnement local
+
+tags:
+  - name: Conducteurs
+    description: Gestion des profils conducteurs
+
+paths:
+
+  /conducteurs:
+    get:
+      tags: [Conducteurs]
+      summary: Liste tous les conducteurs
+      parameters:
+        - name: statut_compte
+          in: query
+          schema:
+            type: string
+            enum: [ACTIF, INACTIF, SUSPENDU]
+          example: ACTIF
+        - name: disponibilite
+          in: query
+          schema:
+            type: string
+            enum: [DISPONIBLE, EN_MISSION]
+      responses:
+        '200':
+          description: Liste des conducteurs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ConducteurDTO'
+              example:
+                - id: "660e8400-e29b-41d4-a716-446655440010"
+                  keycloak_id: "kc-001"
+                  prenom: "Jean"
+                  nom: "Dupont"
+                  email: "jean.dupont@sgfv.fr"
+                  telephone: "0601020304"
+                  numero_permis: "PERMIS-001"
+                  date_expiration_permis: "2027-06-15"
+                  vehicule_assigne_id: null
+                  statut_compte: "ACTIF"
+                  disponibilite: "DISPONIBLE"
+                  date_creation: "2024-01-10T08:00:00Z"
+        '401':
+          $ref: '#/components/responses/NonAutorise'
+      security:
+        - bearerAuth: []
+
+    post:
+      tags: [Conducteurs]
+      summary: Créer un conducteur (Admin uniquement)
+      description: |
+        Crée un nouveau conducteur.
+        **Réservé au rôle Admin.**
+        Émet l'événement **conducteur.created** sur Kafka.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateConducteurDTO'
+            example:
+              keycloak_id: "kc-005"
+              prenom: "Sophie"
+              nom: "Martin"
+              email: "sophie.martin@sgfv.fr"
+              telephone: "0612345678"
+              numero_permis: "PERMIS-005"
+              date_expiration_permis: "2028-09-20"
+      responses:
+        '201':
+          description: Conducteur créé avec succès
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConducteurDTO'
+              example:
+                id: "660e8400-e29b-41d4-a716-446655440020"
+                keycloak_id: "kc-005"
+                prenom: "Sophie"
+                nom: "Martin"
+                email: "sophie.martin@sgfv.fr"
+                telephone: "0612345678"
+                numero_permis: "PERMIS-005"
+                date_expiration_permis: "2028-09-20"
+                vehicule_assigne_id: null
+                statut_compte: "ACTIF"
+                disponibilite: "DISPONIBLE"
+                date_creation: "2024-03-15T10:00:00Z"
+        '400':
+          description: Données invalides
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErreurDTO'
+              example:
+                code: "VALIDATION_ERROR"
+                message: "Le format de l'email est invalide"
+                timestamp: "2024-03-15T10:00:00Z"
+        '401':
+          $ref: '#/components/responses/NonAutorise'
+        '403':
+          description: Réservé à l'Admin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErreurDTO'
+              example:
+                code: "ACCES_REFUSE"
+                message: "Seul un Admin peut créer un conducteur"
+                timestamp: "2024-03-15T10:00:00Z"
+        '409':
+          description: Email ou numéro de permis déjà existant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErreurDTO'
+              examples:
+                email_existant:
+                  summary: Email déjà utilisé
+                  value:
+                    code: "EMAIL_DEJA_EXISTANT"
+                    message: "Un conducteur avec l'email sophie.martin@sgfv.fr existe déjà"
+                    timestamp: "2024-03-15T10:00:00Z"
+                permis_existant:
+                  summary: Permis déjà enregistré
+                  value:
+                    code: "PERMIS_DEJA_EXISTANT"
+                    message: "Le numéro de permis PERMIS-005 est déjà enregistré"
+                    timestamp: "2024-03-15T10:00:00Z"
+      security:
+        - bearerAuth: []
+
+  /conducteurs/{id}:
+    get:
+      tags: [Conducteurs]
+      summary: Détail d'un conducteur
+      description: Un conducteur ne voit que ses propres données. Admin et Technicien voient tout.
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Détail du conducteur
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConducteurDTO'
+              example:
+                id: "660e8400-e29b-41d4-a716-446655440010"
+                keycloak_id: "kc-001"
+                prenom: "Jean"
+                nom: "Dupont"
+                email: "jean.dupont@sgfv.fr"
+                telephone: "0601020304"
+                numero_permis: "PERMIS-001"
+                date_expiration_permis: "2027-06-15"
+                vehicule_assigne_id: "550e8400-e29b-41d4-a716-446655440001"
+                statut_compte: "ACTIF"
+                disponibilite: "EN_MISSION"
+                date_creation: "2024-01-10T08:00:00Z"
+        '401':
+          $ref: '#/components/responses/NonAutorise'
+        '403':
+          $ref: '#/components/responses/AccesRefuse'
+        '404':
+          $ref: '#/components/responses/Introuvable'
+      security:
+        - bearerAuth: []
+
+    put:
+      tags: [Conducteurs]
+      summary: Modifier un conducteur
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateConducteurDTO'
+            example:
+              telephone: "0699887766"
+              date_expiration_permis: "2029-06-15"
+      responses:
+        '200':
+          description: Conducteur modifié
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConducteurDTO'
+        '401':
+          $ref: '#/components/responses/NonAutorise'
+        '404':
+          $ref: '#/components/responses/Introuvable'
+        '409':
+          description: Email ou permis déjà existant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErreurDTO'
+      security:
+        - bearerAuth: []
+
+    delete:
+      tags: [Conducteurs]
+      summary: Désactiver un conducteur (Admin uniquement)
+      description: |
+        Passe le statut_compte à INACTIF.
+        **Interdit si le conducteur est EN_MISSION.**
+        Émet l'événement **conducteur.deactivated** sur Kafka.
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Conducteur désactivé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConducteurDTO'
+              example:
+                id: "660e8400-e29b-41d4-a716-446655440010"
+                keycloak_id: "kc-001"
+                prenom: "Jean"
+                nom: "Dupont"
+                email: "jean.dupont@sgfv.fr"
+                telephone: "0601020304"
+                numero_permis: "PERMIS-001"
+                date_expiration_permis: "2027-06-15"
+                vehicule_assigne_id: null
+                statut_compte: "INACTIF"
+                disponibilite: "DISPONIBLE"
+                date_creation: "2024-01-10T08:00:00Z"
+        '400':
+          description: Conducteur EN_MISSION — impossible de désactiver
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErreurDTO'
+              example:
+                code: "CONDUCTEUR_EN_MISSION"
+                message: "Impossible de désactiver un conducteur EN_MISSION"
+                timestamp: "2024-03-15T10:00:00Z"
+        '401':
+          $ref: '#/components/responses/NonAutorise'
+        '403':
+          $ref: '#/components/responses/AccesRefuse'
+        '404':
+          $ref: '#/components/responses/Introuvable'
+      security:
+        - bearerAuth: []
+
+  /conducteurs/{id}/statut:
+    patch:
+      tags: [Conducteurs]
+      summary: Changer le statut_compte (Admin uniquement)
+      description: |
+        Si INACTIF ou SUSPENDU → vehicule_assigne_id forcé à NULL automatiquement.
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [statut_compte]
+              properties:
+                statut_compte:
+                  type: string
+                  enum: [ACTIF, INACTIF, SUSPENDU]
+            example:
+              statut_compte: "SUSPENDU"
+      responses:
+        '200':
+          description: Statut modifié
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConducteurDTO'
+        '401':
+          $ref: '#/components/responses/NonAutorise'
+        '403':
+          $ref: '#/components/responses/AccesRefuse'
+      security:
+        - bearerAuth: []
+
+  /conducteurs/{id}/disponibilite:
+    patch:
+      tags: [Conducteurs]
+      summary: Changer la disponibilité
+      description: |
+        DISPONIBLE → EN_MISSION : émet **conducteur.assigned** sur Kafka.
+        EN_MISSION → DISPONIBLE : émet **conducteur.unassigned** sur Kafka.
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [disponibilite]
+              properties:
+                disponibilite:
+                  type: string
+                  enum: [DISPONIBLE, EN_MISSION]
+            example:
+              disponibilite: "EN_MISSION"
+      responses:
+        '200':
+          description: Disponibilité modifiée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConducteurDTO'
+        '400':
+          description: Conducteur INACTIF ou SUSPENDU — modification interdite
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErreurDTO'
+              example:
+                code: "CONDUCTEUR_INACTIF"
+                message: "Impossible de modifier la disponibilité d'un conducteur INACTIF"
+                timestamp: "2024-03-15T10:00:00Z"
+        '401':
+          $ref: '#/components/responses/NonAutorise'
+      security:
+        - bearerAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token JWT fourni par Keycloak (realm sgfv)
+
+  parameters:
+    IdPath:
+      name: id
+      in: path
+      required: true
+      description: Identifiant UUID du conducteur
+      schema:
+        type: string
+        format: uuid
+      example: "660e8400-e29b-41d4-a716-446655440010"
+
+  schemas:
+    ConducteurDTO:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "660e8400-e29b-41d4-a716-446655440010"
+        keycloak_id:
+          type: string
+          example: "kc-001"
+        prenom:
+          type: string
+          example: "Jean"
+        nom:
+          type: string
+          example: "Dupont"
+        email:
+          type: string
+          example: "jean.dupont@sgfv.fr"
+        telephone:
+          type: string
+          nullable: true
+          example: "0601020304"
+        numero_permis:
+          type: string
+          example: "PERMIS-001"
+        date_expiration_permis:
+          type: string
+          format: date
+          example: "2027-06-15"
+        vehicule_assigne_id:
+          type: string
+          format: uuid
+          nullable: true
+          example: null
+        statut_compte:
+          type: string
+          enum: [ACTIF, INACTIF, SUSPENDU]
+          example: "ACTIF"
+        disponibilite:
+          type: string
+          enum: [DISPONIBLE, EN_MISSION]
+          example: "DISPONIBLE"
+        date_creation:
+          type: string
+          format: date-time
+          example: "2024-01-10T08:00:00Z"
+
+    CreateConducteurDTO:
+      type: object
+      required: [keycloak_id, prenom, nom, email, numero_permis, date_expiration_permis]
+      properties:
+        keycloak_id:
+          type: string
+          example: "kc-005"
+        prenom:
+          type: string
+          example: "Sophie"
+        nom:
+          type: string
+          example: "Martin"
+        email:
+          type: string
+          example: "sophie.martin@sgfv.fr"
+        telephone:
+          type: string
+          example: "0612345678"
+        numero_permis:
+          type: string
+          example: "PERMIS-005"
+        date_expiration_permis:
+          type: string
+          format: date
+          example: "2028-09-20"
+
+    UpdateConducteurDTO:
+      type: object
+      description: Tous les champs sont optionnels
+      properties:
+        prenom:
+          type: string
+        nom:
+          type: string
+        email:
+          type: string
+        telephone:
+          type: string
+        numero_permis:
+          type: string
+        date_expiration_permis:
+          type: string
+          format: date
+
+    ErreurDTO:
+      type: object
+      properties:
+        code:
+          type: string
+          example: "CONDUCTEUR_INTROUVABLE"
+        message:
+          type: string
+          example: "Aucun conducteur trouvé avec cet identifiant"
+        timestamp:
+          type: string
+          format: date-time
+
+  responses:
+    Introuvable:
+      description: Ressource non trouvée
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErreurDTO'
+          example:
+            code: "CONDUCTEUR_INTROUVABLE"
+            message: "Aucun conducteur trouvé avec cet identifiant"
+            timestamp: "2024-03-15T10:00:00Z"
+    NonAutorise:
+      description: Token JWT manquant ou invalide
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErreurDTO'
+          example:
+            code: "TOKEN_INVALIDE"
+            message: "Token JWT manquant ou expiré"
+            timestamp: "2024-03-15T10:00:00Z"
+    AccesRefuse:
+      description: Droits insuffisants — Admin requis
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErreurDTO'
+          example:
+            code: "ACCES_REFUSE"
+            message: "Seul un Admin peut effectuer cette opération"
+            timestamp: "2024-03-15T10:00:00Z"

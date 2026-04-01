@@ -1,0 +1,195 @@
+asyncapi: 2.6.0
+info:
+  title: Topic vehicules
+  version: 1.0.0
+  description: |
+    Producteur   : service-vehicules (port 8081)
+    Consommateurs : service-maintenance, service-localisation, service-alertes
+
+    ## Rôle de ce topic
+    Ce topic est le canal de communication central du SGFV.
+    Chaque changement sur un véhicule est publié ici.
+    Les 3 services consommateurs mettent à jour leur vehicules_cache local.
+
+    ## Impact des événements
+    | Événement | Impact |
+    |---|---|
+    | vehicule.created | vehicules_cache mis à jour (maintenance, localisation, alertes) |
+    | vehicule.status.changed | vehicules_cache mis à jour dans les 3 services |
+    | vehicule.assigned | conducteur_id enregistré dans vehicules_cache |
+    | vehicule.archived | statut HORS_SERVICE propagé aux 3 caches |
+
+servers:
+  kafka-local:
+    url: localhost:9092
+    protocol: kafka
+    description: Broker Kafka local (Docker)
+
+channels:
+  vehicules:
+    description: Tous les événements liés aux véhicules du parc
+    publish:
+      operationId: publierEvenementVehicule
+      summary: Publier un événement véhicule
+      message:
+        oneOf:
+          - $ref: '#/components/messages/VehiculeCreated'
+          - $ref: '#/components/messages/VehiculeStatusChanged'
+          - $ref: '#/components/messages/VehiculeAssigned'
+          - $ref: '#/components/messages/VehiculeArchived'
+
+components:
+  messages:
+
+    VehiculeCreated:
+      name: vehicule.created
+      title: Véhicule créé
+      contentType: application/json
+      summary: Émis lors de la création d'un nouveau véhicule dans le parc
+      payload:
+        type: object
+        required: [event, vehicule_id, plaque, marque, modele, annee, statut, horodatage]
+        properties:
+          event:
+            type: string
+            const: vehicule.created
+            description: Type d'événement — toujours "vehicule.created"
+          vehicule_id:
+            type: string
+            format: uuid
+            description: Identifiant unique du véhicule
+          plaque:
+            type: string
+            description: Plaque d'immatriculation — unique dans le système
+          marque:
+            type: string
+          modele:
+            type: string
+          annee:
+            type: integer
+            minimum: 1900
+            maximum: 2100
+          statut:
+            type: string
+            enum: [DISPONIBLE, EN_MISSION, EN_MAINTENANCE, EN_PANNE, HORS_SERVICE]
+            description: Toujours DISPONIBLE à la création
+          horodatage:
+            type: string
+            format: date-time
+      examples:
+        - name: Nouveau véhicule Renault
+          payload:
+            event: "vehicule.created"
+            vehicule_id: "550e8400-e29b-41d4-a716-446655440001"
+            plaque: "AB-123-CD"
+            marque: "Renault"
+            modele: "Clio"
+            annee: 2021
+            statut: "DISPONIBLE"
+            horodatage: "2024-03-15T10:00:00Z"
+
+    VehiculeStatusChanged:
+      name: vehicule.status.changed
+      title: Statut véhicule modifié
+      contentType: application/json
+      summary: Émis à chaque changement de statut d'un véhicule
+      payload:
+        type: object
+        required: [event, vehicule_id, plaque, statut_precedent, statut_nouveau, horodatage]
+        properties:
+          event:
+            type: string
+            const: vehicule.status.changed
+          vehicule_id:
+            type: string
+            format: uuid
+          plaque:
+            type: string
+          statut_precedent:
+            type: string
+            enum: [DISPONIBLE, EN_MISSION, EN_MAINTENANCE, EN_PANNE, HORS_SERVICE]
+            description: Statut avant le changement
+          statut_nouveau:
+            type: string
+            enum: [DISPONIBLE, EN_MISSION, EN_MAINTENANCE, EN_PANNE, HORS_SERVICE]
+            description: Statut après le changement
+          horodatage:
+            type: string
+            format: date-time
+      examples:
+        - name: Véhicule part en mission
+          payload:
+            event: "vehicule.status.changed"
+            vehicule_id: "550e8400-e29b-41d4-a716-446655440001"
+            plaque: "AB-123-CD"
+            statut_precedent: "DISPONIBLE"
+            statut_nouveau: "EN_MISSION"
+            horodatage: "2024-03-15T08:30:00Z"
+        - name: Véhicule tombe en panne
+          payload:
+            event: "vehicule.status.changed"
+            vehicule_id: "550e8400-e29b-41d4-a716-446655440002"
+            plaque: "EF-456-GH"
+            statut_precedent: "EN_MISSION"
+            statut_nouveau: "EN_PANNE"
+            horodatage: "2024-03-15T14:20:00Z"
+
+    VehiculeAssigned:
+      name: vehicule.assigned
+      title: Conducteur assigné à un véhicule
+      contentType: application/json
+      summary: Émis lors de l'assignation d'un conducteur à un véhicule
+      payload:
+        type: object
+        required: [event, vehicule_id, conducteur_id, horodatage]
+        properties:
+          event:
+            type: string
+            const: vehicule.assigned
+          vehicule_id:
+            type: string
+            format: uuid
+          conducteur_id:
+            type: string
+            format: uuid
+          horodatage:
+            type: string
+            format: date-time
+      examples:
+        - name: Assignation d'un conducteur
+          payload:
+            event: "vehicule.assigned"
+            vehicule_id: "550e8400-e29b-41d4-a716-446655440001"
+            conducteur_id: "660e8400-e29b-41d4-a716-446655440010"
+            horodatage: "2024-03-15T08:00:00Z"
+
+    VehiculeArchived:
+      name: vehicule.archived
+      title: Véhicule archivé
+      contentType: application/json
+      summary: Émis lors de l'archivage d'un véhicule (passage à HORS_SERVICE)
+      description: |
+        Suppression logique uniquement — aucune donnée physiquement supprimée.
+        Les 3 caches consommateurs mettent à jour le statut à HORS_SERVICE.
+      payload:
+        type: object
+        required: [event, vehicule_id, plaque, horodatage]
+        properties:
+          event:
+            type: string
+            const: vehicule.archived
+          vehicule_id:
+            type: string
+            format: uuid
+          plaque:
+            type: string
+          horodatage:
+            type: string
+            format: date-time
+      examples:
+        - name: Archivage d'un véhicule hors service
+          payload:
+            event: "vehicule.archived"
+            vehicule_id: "550e8400-e29b-41d4-a716-446655440005"
+            plaque: "QR-345-ST"
+            horodatage: "2024-03-15T16:00:00Z"

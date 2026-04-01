@@ -1,0 +1,330 @@
+# ─────────────────────────────────────────────────
+# Deployment service-vehicules
+# ─────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-vehicules
+  namespace: sgfv
+  labels:
+    app: service-vehicules
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: service-vehicules
+  template:
+    metadata:
+      labels:
+        app: service-vehicules
+    spec:
+      containers:
+        - name: service-vehicules
+          image: gestion_vehicules-service-vehicules:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8081
+          envFrom:
+            - configMapRef:
+                name: config-vehicules
+          env:
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: secret-db
+                  key: username
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: secret-db
+                  key: password
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          # startupProbe : laisse Spring Boot démarrer tranquillement (max 200x10s = 2000s)
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8081
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 200
+          # livenessProbe : redémarre si le service plante après démarrage
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8081
+            periodSeconds: 30
+            failureThreshold: 10
+            timeoutSeconds: 10
+          # readinessProbe : retire du load balancer si pas prêt
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8081
+            periodSeconds: 10
+            failureThreshold: 20
+            timeoutSeconds: 10
+
+---
+# ─────────────────────────────────────────────────
+# Deployment service-conducteurs
+# ─────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-conducteurs
+  namespace: sgfv
+  labels:
+    app: service-conducteurs
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: service-conducteurs
+  template:
+    metadata:
+      labels:
+        app: service-conducteurs
+    spec:
+      containers:
+        - name: service-conducteurs
+          image: gestion_vehicules-service-conducteurs:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8082
+          envFrom:
+            - configMapRef:
+                name: config-conducteurs
+          env:
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: secret-db
+                  key: username
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: secret-db
+                  key: password
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8082
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 200
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8082
+            periodSeconds: 30
+            failureThreshold: 10
+            timeoutSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8082
+            periodSeconds: 10
+            failureThreshold: 20
+            timeoutSeconds: 10
+
+---
+# ─────────────────────────────────────────────────
+# Deployment service-maintenance
+# ─────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-maintenance
+  namespace: sgfv
+  labels:
+    app: service-maintenance
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: service-maintenance
+  template:
+    metadata:
+      labels:
+        app: service-maintenance
+    spec:
+      containers:
+        - name: service-maintenance
+          image: gestion_vehicules-service-maintenance:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8083
+          envFrom:
+            - configMapRef:
+                name: config-maintenance
+          env:
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: secret-db
+                  key: username
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: secret-db
+                  key: password
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8083
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 200
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8083
+            periodSeconds: 30
+            failureThreshold: 10
+            timeoutSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8083
+            periodSeconds: 10
+            failureThreshold: 20
+            timeoutSeconds: 10
+
+---
+# ─────────────────────────────────────────────────
+# Deployment service-localisation
+# ─────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-localisation
+  namespace: sgfv
+  labels:
+    app: service-localisation
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: service-localisation
+  template:
+    metadata:
+      labels:
+        app: service-localisation
+    spec:
+      containers:
+        - name: service-localisation
+          image: gestion_vehicules-service-localisation:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8084
+            - containerPort: 3001
+          envFrom:
+            - configMapRef:
+                name: config-localisation
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "250m"
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8084
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8084
+            periodSeconds: 20
+            failureThreshold: 5
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8084
+            periodSeconds: 10
+            failureThreshold: 10
+            timeoutSeconds: 5
+
+---
+# ─────────────────────────────────────────────────
+# Deployment service-alertes
+# ─────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-alertes
+  namespace: sgfv
+  labels:
+    app: service-alertes
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: service-alertes
+  template:
+    metadata:
+      labels:
+        app: service-alertes
+    spec:
+      containers:
+        - name: service-alertes
+          image: gestion_vehicules-service-alertes:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3002
+          envFrom:
+            - configMapRef:
+                name: config-alertes
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "250m"
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 3002
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3002
+            periodSeconds: 20
+            failureThreshold: 5
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3002
+            periodSeconds: 10
+            failureThreshold: 10
+            timeoutSeconds: 5

@@ -1,0 +1,224 @@
+# ───────────────────────────────────────────────────────────
+# ENUMS
+# ───────────────────────────────────────────────────────────
+
+enum StatutVehicule {
+  DISPONIBLE
+  EN_MISSION
+  EN_MAINTENANCE
+  EN_PANNE
+  HORS_SERVICE
+}
+
+enum StatutCompte {
+  ACTIF
+  INACTIF
+  SUSPENDU
+}
+
+enum DisponibiliteConducteur {
+  DISPONIBLE
+  EN_MISSION
+}
+
+enum StatutMaintenance {
+  SIGNALEE
+  PLANIFIEE
+  EN_COURS
+  TERMINEE
+  ANNULEE
+}
+
+enum TypeZone {
+  AUTORISEE
+  INTERDITE
+}
+
+enum NiveauAlerte {
+  INFO
+  AVERTISSEMENT
+  CRITIQUE
+  URGENCE
+}
+
+enum TypeEvenementAlerte {
+  VEHICULE_ASSIGNE
+  REVISION_PLANIFIEE
+  PERMIS_EXPIRE
+  SEUIL_KM_ATTEINT
+  MAINTENANCE_TERMINEE
+  PANNE_SIGNALEE
+  SORTIE_ZONE
+  VITESSE_EXCESSIVE
+}
+
+enum RoleDestinataire {
+  CONDUCTEUR
+  TECHNICIEN
+  ADMIN
+}
+
+# ───────────────────────────────────────────────────────────
+# TYPES — service-vehicules
+# ───────────────────────────────────────────────────────────
+
+type Vehicule {
+  id: ID!
+  plaque: String!
+  marque: String!
+  modele: String!
+  annee: Int!
+  kilometrage: Int!
+  statut: StatutVehicule!
+  conducteurAssigneId: ID
+  dateAjout: String!
+  dateModification: String!
+}
+
+# ───────────────────────────────────────────────────────────
+# TYPES — service-conducteurs
+# ───────────────────────────────────────────────────────────
+
+type Conducteur {
+  id: ID!
+  prenom: String!
+  nom: String!
+  email: String!
+  telephone: String
+  numeroPermis: String!
+  dateExpirationPermis: String!
+  vehiculeAssigneId: ID
+  statutCompte: StatutCompte!
+  disponibilite: DisponibiliteConducteur!
+  dateCreation: String!
+}
+
+# ───────────────────────────────────────────────────────────
+# TYPES — service-maintenance
+# ───────────────────────────────────────────────────────────
+
+type Maintenance {
+  id: ID!
+  vehiculeId: ID!
+  typeIntervention: String!
+  description: String
+  statut: StatutMaintenance!
+  technicienId: ID
+  dateCreation: String!
+  datePlanifiee: String
+  dateDemarrage: String
+  dateCloture: String
+  cout: Float
+  compteRendu: String
+}
+
+# ───────────────────────────────────────────────────────────
+# TYPES — service-localisation
+# ───────────────────────────────────────────────────────────
+
+type Position {
+  vehiculeId: ID!
+  latitude: Float!
+  longitude: Float!
+  vitesse: Float!
+  direction: Float!
+  horodatage: String!
+}
+
+type Zone {
+  id: ID!
+  nom: String!
+  type: TypeZone!
+  latitudeCentre: Float!
+  longitudeCentre: Float!
+  rayonMetres: Int!
+  active: Boolean!
+  dateCreation: String!
+}
+
+# ───────────────────────────────────────────────────────────
+# TYPES — service-alertes
+# ───────────────────────────────────────────────────────────
+
+type Alerte {
+  id: ID!
+  typeEvenement: TypeEvenementAlerte!
+  niveau: NiveauAlerte!
+  roleDestinataire: RoleDestinataire!
+  vehiculeId: ID
+  utilisateurId: String
+  message: String!
+  estLu: Boolean!
+  dateLecture: String
+  dateCreation: String!
+}
+
+# ───────────────────────────────────────────────────────────
+# QUERIES
+# ───────────────────────────────────────────────────────────
+
+type Query {
+
+  # service-vehicules
+  vehicules(statut: StatutVehicule, marque: String): [Vehicule!]!
+  vehicule(id: ID!): Vehicule
+
+  # service-conducteurs
+  conducteurs(statutCompte: StatutCompte, disponibilite: DisponibiliteConducteur): [Conducteur!]!
+  conducteur(id: ID!): Conducteur
+
+  # service-maintenance
+  maintenances(statut: StatutMaintenance, vehiculeId: ID): [Maintenance!]!
+  maintenance(id: ID!): Maintenance
+  historiqueMaintenance(vehiculeId: ID!): [Maintenance!]!
+
+  # service-localisation
+  positionsActuelles: [Position!]!
+  dernierePosition(vehiculeId: ID!): Position
+  trajetVehicule(vehiculeId: ID!, debut: String, fin: String): [Position!]!
+  zones: [Zone!]!
+  zone(id: ID!): Zone
+
+  # service-alertes
+  alertes(niveau: NiveauAlerte, estLu: Boolean, typeEvenement: TypeEvenementAlerte): [Alerte!]!
+  alerte(id: ID!): Alerte
+  mesAlertes: [Alerte!]!
+}
+
+# ───────────────────────────────────────────────────────────
+# MUTATIONS
+# ───────────────────────────────────────────────────────────
+
+type Mutation {
+
+  # service-vehicules
+  creerVehicule(plaque: String!, marque: String!, modele: String!, annee: Int!, kilometrage: Int): Vehicule!
+  modifierVehicule(id: ID!, marque: String, modele: String, annee: Int, kilometrage: Int): Vehicule!
+  changerStatutVehicule(id: ID!, statut: StatutVehicule!): Vehicule!
+  assignerConducteur(vehiculeId: ID!, conducteurId: ID!): Vehicule!
+  archiverVehicule(id: ID!): Vehicule!
+
+  # service-conducteurs
+  creerConducteur(keycloakId: String!, prenom: String!, nom: String!, email: String!, telephone: String, numeroPermis: String!, dateExpirationPermis: String!): Conducteur!
+  modifierConducteur(id: ID!, prenom: String, nom: String, email: String, telephone: String, numeroPermis: String, dateExpirationPermis: String): Conducteur!
+  changerStatutConducteur(id: ID!, statutCompte: StatutCompte!): Conducteur!
+  changerDisponibiliteConducteur(id: ID!, disponibilite: DisponibiliteConducteur!): Conducteur!
+  desactiverConducteur(id: ID!): Conducteur!
+
+  # service-maintenance
+  signalerMaintenance(vehiculeId: ID!, typeIntervention: String!, description: String): Maintenance!
+  planifierMaintenance(id: ID!, datePlanifiee: String!, technicienId: ID!): Maintenance!
+  demarrerMaintenance(id: ID!): Maintenance!
+  cloturerMaintenance(id: ID!, compteRendu: String, cout: Float): Maintenance!
+  annulerMaintenance(id: ID!): Maintenance!
+
+  # service-localisation
+  enregistrerPosition(vehiculeId: ID!, latitude: Float!, longitude: Float!, vitesse: Float, direction: Float): Position!
+  creerZone(nom: String!, type: TypeZone!, latitudeCentre: Float!, longitudeCentre: Float!, rayonMetres: Int!): Zone!
+  modifierZone(id: ID!, nom: String, type: TypeZone, latitudeCentre: Float, longitudeCentre: Float, rayonMetres: Int): Zone!
+  supprimerZone(id: ID!): Boolean!
+
+  # service-alertes
+  marquerAlerteLue(id: ID!): Alerte!
+  supprimerAlerte(id: ID!): Boolean!
+}

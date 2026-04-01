@@ -1,0 +1,229 @@
+asyncapi: 2.6.0
+info:
+  title: Topic conducteurs
+  version: 1.0.0
+  description: |
+    Producteur   : service-conducteurs (port 8082)
+    Consommateurs : service-vehicules, service-alertes
+
+    ## Rôle de ce topic
+    Propage tous les changements d'état des conducteurs.
+    service-vehicules consomme pour maintenir la cohérence des assignations.
+    service-alertes consomme pour créer les alertes VEHICULE_ASSIGNE et PERMIS_EXPIRE.
+
+    ## Impact des événements
+    | Événement | Consommateur | Action |
+    |---|---|---|
+    | conducteur.created | service-alertes | Met à jour utilisateurs_cache |
+    | conducteur.assigned | service-vehicules | Met à jour conducteur_assigne_id |
+    | conducteur.assigned | service-alertes | Crée alerte VEHICULE_ASSIGNE (INFO) |
+    | conducteur.unassigned | service-vehicules | Met conducteur_assigne_id à NULL |
+    | conducteur.deactivated | service-vehicules | Force vehicule_assigne_id à NULL |
+    | conducteur.permis.expiration | service-alertes | Crée alerte PERMIS_EXPIRE (AVERTISSEMENT) |
+
+servers:
+  kafka-local:
+    url: localhost:9092
+    protocol: kafka
+    description: Broker Kafka local (Docker)
+
+channels:
+  conducteurs:
+    description: Tous les événements liés aux conducteurs
+    publish:
+      operationId: publierEvenementConducteur
+      summary: Publier un événement conducteur
+      message:
+        oneOf:
+          - $ref: '#/components/messages/ConducteurCreated'
+          - $ref: '#/components/messages/ConducteurAssigned'
+          - $ref: '#/components/messages/ConducteurUnassigned'
+          - $ref: '#/components/messages/ConducteurDeactivated'
+          - $ref: '#/components/messages/ConducteurPermisExpiration'
+
+components:
+  messages:
+
+    ConducteurCreated:
+      name: conducteur.created
+      title: Conducteur créé
+      contentType: application/json
+      summary: Émis lors de la création d'un conducteur (Admin uniquement)
+      payload:
+        type: object
+        required: [event, conducteur_id, keycloak_id, prenom, nom, email, horodatage]
+        properties:
+          event:
+            type: string
+            const: conducteur.created
+          conducteur_id:
+            type: string
+            format: uuid
+          keycloak_id:
+            type: string
+            description: Identifiant Keycloak — clé de liaison avec l'authentification
+          prenom:
+            type: string
+          nom:
+            type: string
+          email:
+            type: string
+          horodatage:
+            type: string
+            format: date-time
+      examples:
+        - name: Création d'un nouveau conducteur
+          payload:
+            event: "conducteur.created"
+            conducteur_id: "660e8400-e29b-41d4-a716-446655440010"
+            keycloak_id: "kc-001"
+            prenom: "Amel"
+            nom: "Ouachour"
+            email: "conducteur@sgfv.fr"
+            horodatage: "2024-03-15T09:00:00Z"
+
+    ConducteurAssigned:
+      name: conducteur.assigned
+      title: Conducteur assigné à un véhicule
+      contentType: application/json
+      summary: Émis quand un conducteur est mis EN_MISSION sur un véhicule
+      description: |
+        Déclenche dans service-alertes la création d'une alerte
+        VEHICULE_ASSIGNE de niveau INFO pour le conducteur.
+      payload:
+        type: object
+        required: [event, conducteur_id, vehicule_id, horodatage]
+        properties:
+          event:
+            type: string
+            const: conducteur.assigned
+          conducteur_id:
+            type: string
+            format: uuid
+          vehicule_id:
+            type: string
+            format: uuid
+          horodatage:
+            type: string
+            format: date-time
+      examples:
+        - name: Conducteur assigné à un véhicule
+          payload:
+            event: "conducteur.assigned"
+            conducteur_id: "660e8400-e29b-41d4-a716-446655440010"
+            vehicule_id: "550e8400-e29b-41d4-a716-446655440001"
+            horodatage: "2024-03-15T08:00:00Z"
+
+    ConducteurUnassigned:
+      name: conducteur.unassigned
+      title: Conducteur désassigné d'un véhicule
+      contentType: application/json
+      summary: Émis quand un conducteur revient à DISPONIBLE (fin de mission)
+      payload:
+        type: object
+        required: [event, conducteur_id, vehicule_id, horodatage]
+        properties:
+          event:
+            type: string
+            const: conducteur.unassigned
+          conducteur_id:
+            type: string
+            format: uuid
+          vehicule_id:
+            type: string
+            format: uuid
+          horodatage:
+            type: string
+            format: date-time
+      examples:
+        - name: Fin de mission d'un conducteur
+          payload:
+            event: "conducteur.unassigned"
+            conducteur_id: "660e8400-e29b-41d4-a716-446655440010"
+            vehicule_id: "550e8400-e29b-41d4-a716-446655440001"
+            horodatage: "2024-03-15T18:00:00Z"
+
+    ConducteurDeactivated:
+      name: conducteur.deactivated
+      title: Conducteur désactivé
+      contentType: application/json
+      summary: Émis quand un conducteur est désactivé (Admin uniquement)
+      description: |
+        Si le conducteur avait un véhicule assigné, vehicule_assigne_id
+        est fourni dans le message pour que service-vehicules
+        puisse mettre conducteur_assigne_id à NULL.
+      payload:
+        type: object
+        required: [event, conducteur_id, horodatage]
+        properties:
+          event:
+            type: string
+            const: conducteur.deactivated
+          conducteur_id:
+            type: string
+            format: uuid
+          vehicule_assigne_id:
+            type: string
+            format: uuid
+            nullable: true
+            description: Présent si le conducteur avait un véhicule assigné
+          horodatage:
+            type: string
+            format: date-time
+      examples:
+        - name: Désactivation sans véhicule assigné
+          payload:
+            event: "conducteur.deactivated"
+            conducteur_id: "660e8400-e29b-41d4-a716-446655440011"
+            vehicule_assigne_id: null
+            horodatage: "2024-03-15T10:00:00Z"
+        - name: Désactivation avec véhicule assigné
+          payload:
+            event: "conducteur.deactivated"
+            conducteur_id: "660e8400-e29b-41d4-a716-446655440010"
+            vehicule_assigne_id: "550e8400-e29b-41d4-a716-446655440001"
+            horodatage: "2024-03-15T10:00:00Z"
+
+    ConducteurPermisExpiration:
+      name: conducteur.permis.expiration
+      title: Permis expirant bientôt
+      contentType: application/json
+      summary: Émis quand le permis expire dans moins de 30 jours
+      description: |
+        Déclenche dans service-alertes la création d'une alerte
+        PERMIS_EXPIRE de niveau AVERTISSEMENT destinée à l'Admin.
+      payload:
+        type: object
+        required: [event, conducteur_id, prenom, nom, date_expiration, jours_restants, horodatage]
+        properties:
+          event:
+            type: string
+            const: conducteur.permis.expiration
+          conducteur_id:
+            type: string
+            format: uuid
+          prenom:
+            type: string
+          nom:
+            type: string
+          date_expiration:
+            type: string
+            format: date
+          jours_restants:
+            type: integer
+            description: Nombre de jours avant expiration
+            minimum: 0
+            maximum: 30
+          horodatage:
+            type: string
+            format: date-time
+      examples:
+        - name: Permis expirant dans 28 jours
+          payload:
+            event: "conducteur.permis.expiration"
+            conducteur_id: "660e8400-e29b-41d4-a716-446655440010"
+            prenom: "Amel"
+            nom: "Ouachour"
+            date_expiration: "2024-04-12"
+            jours_restants: 28
+            horodatage: "2024-03-15T00:00:00Z"

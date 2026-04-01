@@ -1,0 +1,475 @@
+openapi: 3.0.3
+info:
+  title: service-localisation API
+  description: |
+    Tracking GPS en temps réel + géofencing.
+    
+    ## Règles métier
+    - Seuls les véhicules EN_MISSION génèrent des positions GPS
+    - 1 position enregistrée toutes les 10 secondes par véhicule
+    - Rétention des données : 12 mois (suppression automatique TimescaleDB)
+    - latitude ∈ [-90, 90] / longitude ∈ [-180, 180]
+    - vitesse >= 0 / direction ∈ [0, 360]
+    - À chaque position : vérification géofencing contre toutes les zones actives
+    - Zone INTERDITE franchie → événement geofence.alert sur Kafka
+    - Vitesse excessive → événement vitesse.excessive sur Kafka
+    - Zones créées/modifiées/supprimées par Admin uniquement
+    
+    ## Événements Kafka émis
+    | Événement | Déclencheur |
+    |---|---|
+    | location.updated | Nouvelle position enregistrée |
+    | geofence.alert | Véhicule entre dans une zone INTERDITE |
+    | vitesse.excessive | Vitesse excessive détectée |
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:3001
+    description: Environnement local
+
+tags:
+  - name: Localisation
+    description: Positions GPS des véhicules
+  - name: Zones
+    description: Zones de géofencing (Admin uniquement)
+
+paths:
+
+  /localisation/positions:
+    post:
+      tags: [Localisation]
+      summary: Enregistrer une position GPS
+      description: |
+        Enregistre une nouvelle position pour un véhicule EN_MISSION.
+        Déclenche automatiquement la vérification géofencing.
+        Émet **location.updated** sur Kafka.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePositionDTO'
+            example:
+              vehicule_id: "550e8400-e29b-41d4-a716-446655440002"
+              latitude: 49.4431
+              longitude: 1.0993
+              vitesse: 52.5
+              direction: 90.0
+      responses:
+        '201':
+          description: Position enregistrée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PositionDTO'
+              example:
+                vehicule_id: "550e8400-e29b-41d4-a716-446655440002"
+                latitude: 49.4431
+                longitude: 1.0993
+                vitesse: 52.5
+                direction: 90.0
+                horodatage: "2024-03-15T14:00:00Z"
+        '400':
+          description: Données invalides ou véhicule non EN_MISSION
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErreurDTO'
+              examples:
+                vehicule_non_mission:
+                  summary: Véhicule pas EN_MISSION
+                  value:
+                    code: "VEHICULE_NON_EN_MISSION"
+                    message: "Seuls les véhicules EN_MISSION peuvent enregistrer des positions"
+                    timestamp: "2024-03-15T14:00:00Z"
+                coordonnees_invalides:
+                  summary: Coordonnées invalides
+                  value:
+                    code: "COORDONNEES_INVALIDES"
+                    message: "La latitude doit être comprise entre -90 et 90"
+                    timestamp: "2024-03-15T14:00:00Z"
+        '401':
+          $ref: '#/components/responses/NonAutorise'
+      security:
+        - bearerAuth: []
+
+  /localisation/vehicules:
+    get:
+      tags: [Localisation]
+      summary: Positions actuelles de tous les véhicules
+      description: Retourne la dernière position connue de chaque véhicule EN_MISSION
+      responses:
+        '200':
+          description: Positions actuelles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PositionDTO'
+              example:
+                - vehicule_id: "550e8400-e29b-41d4-a716-446655440002"
+                  latitude: 49.4431
+                  longitude: 1.0993
+                  vitesse: 52.5
+                  direction: 90.0
+                  horodatage: "2024-03-15T14:00:10Z"
+                - vehicule_id: "550e8400-e29b-41d4-a716-446655440005"
+                  latitude: 48.8566
+                  longitude: 2.3522
+                  vitesse: 0.0
+                  direction: 0.0
+                  horodatage: "2024-03-15T14:00:00Z"
+        '401':
+          $ref: '#/components/responses/NonAutorise'
+      security:
+        - bearerAuth: []
+
+  /localisation/vehicules/{id}:
+    get:
+      tags: [Localisation]
+      summary: Dernière position d'un véhicule
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Dernière position connue
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PositionDTO'
+              example:
+                vehicule_id: "550e8400-e29b-41d4-a716-446655440002"
+                latitude: 49.4431
+                longitude: 1.0993
+                vitesse: 52.5
+                direction: 90.0
+                horodatage: "2024-03-15T14:00:10Z"
+        '401':
+          $ref: '#/components/responses/NonAutorise'
+        '404':
+          $ref: '#/components/responses/Introuvable'
+      security:
+        - bearerAuth: []
+
+  /localisation/vehicules/{id}/trajet:
+    get:
+      tags: [Localisation]
+      summary: Historique des trajets d'un véhicule
+      description: Rétention 12 mois — positions toutes les 10 secondes
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+        - name: debut
+          in: query
+          description: Date de début (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+          example: "2024-03-15T08:00:00Z"
+        - name: fin
+          in: query
+          description: Date de fin (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+          example: "2024-03-15T18:00:00Z"
+      responses:
+        '200':
+          description: Historique GPS
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PositionDTO'
+              example:
+                - vehicule_id: "550e8400-e29b-41d4-a716-446655440002"
+                  latitude: 49.4400
+                  longitude: 1.0950
+                  vitesse: 48.0
+                  direction: 85.0
+                  horodatage: "2024-03-15T08:00:00Z"
+                - vehicule_id: "550e8400-e29b-41d4-a716-446655440002"
+                  latitude: 49.4431
+                  longitude: 1.0993
+                  vitesse: 52.5
+                  direction: 90.0
+                  horodatage: "2024-03-15T08:00:10Z"
+        '401':
+          $ref: '#/components/responses/NonAutorise'
+      security:
+        - bearerAuth: []
+
+  /localisation/zones:
+    get:
+      tags: [Zones]
+      summary: Liste toutes les zones de géofencing
+      responses:
+        '200':
+          description: Liste des zones
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ZoneDTO'
+              example:
+                - id: "990e8400-e29b-41d4-a716-446655440001"
+                  nom: "Zone Rouen Centre"
+                  type: "AUTORISEE"
+                  latitude_centre: 49.4431
+                  longitude_centre: 1.0993
+                  rayon_metres: 8000
+                  active: true
+                  date_creation: "2024-01-01T00:00:00Z"
+                - id: "990e8400-e29b-41d4-a716-446655440002"
+                  nom: "Zone Industrielle A"
+                  type: "INTERDITE"
+                  latitude_centre: 49.3800
+                  longitude_centre: 1.0500
+                  rayon_metres: 2000
+                  active: true
+                  date_creation: "2024-01-01T00:00:00Z"
+        '401':
+          $ref: '#/components/responses/NonAutorise'
+      security:
+        - bearerAuth: []
+
+    post:
+      tags: [Zones]
+      summary: Créer une zone (Admin uniquement)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateZoneDTO'
+            example:
+              nom: "Zone Industrielle B"
+              type: "INTERDITE"
+              latitude_centre: 49.3900
+              longitude_centre: 1.0600
+              rayon_metres: 1500
+      responses:
+        '201':
+          description: Zone créée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ZoneDTO'
+              example:
+                id: "990e8400-e29b-41d4-a716-446655440003"
+                nom: "Zone Industrielle B"
+                type: "INTERDITE"
+                latitude_centre: 49.3900
+                longitude_centre: 1.0600
+                rayon_metres: 1500
+                active: true
+                date_creation: "2024-03-15T10:00:00Z"
+        '401':
+          $ref: '#/components/responses/NonAutorise'
+        '403':
+          $ref: '#/components/responses/AccesRefuse'
+      security:
+        - bearerAuth: []
+
+  /localisation/zones/{id}:
+    put:
+      tags: [Zones]
+      summary: Modifier une zone (Admin uniquement)
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateZoneDTO'
+      responses:
+        '200':
+          description: Zone modifiée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ZoneDTO'
+        '401':
+          $ref: '#/components/responses/NonAutorise'
+        '403':
+          $ref: '#/components/responses/AccesRefuse'
+        '404':
+          $ref: '#/components/responses/Introuvable'
+      security:
+        - bearerAuth: []
+
+    delete:
+      tags: [Zones]
+      summary: Supprimer une zone (Admin uniquement)
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '204':
+          description: Zone supprimée
+        '401':
+          $ref: '#/components/responses/NonAutorise'
+        '403':
+          $ref: '#/components/responses/AccesRefuse'
+        '404':
+          $ref: '#/components/responses/Introuvable'
+      security:
+        - bearerAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    IdPath:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    PositionDTO:
+      type: object
+      properties:
+        vehicule_id:
+          type: string
+          format: uuid
+        latitude:
+          type: number
+          format: double
+          minimum: -90
+          maximum: 90
+          example: 49.4431
+        longitude:
+          type: number
+          format: double
+          minimum: -180
+          maximum: 180
+          example: 1.0993
+        vitesse:
+          type: number
+          minimum: 0
+          example: 52.5
+        direction:
+          type: number
+          minimum: 0
+          maximum: 360
+          example: 90.0
+        horodatage:
+          type: string
+          format: date-time
+          example: "2024-03-15T14:00:00Z"
+
+    CreatePositionDTO:
+      type: object
+      required: [vehicule_id, latitude, longitude]
+      properties:
+        vehicule_id:
+          type: string
+          format: uuid
+        latitude:
+          type: number
+          minimum: -90
+          maximum: 90
+        longitude:
+          type: number
+          minimum: -180
+          maximum: 180
+        vitesse:
+          type: number
+          minimum: 0
+          default: 0
+        direction:
+          type: number
+          minimum: 0
+          maximum: 360
+
+    ZoneDTO:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        nom:
+          type: string
+          example: "Zone Rouen Centre"
+        type:
+          type: string
+          enum: [AUTORISEE, INTERDITE]
+        latitude_centre:
+          type: number
+          format: double
+        longitude_centre:
+          type: number
+          format: double
+        rayon_metres:
+          type: integer
+          example: 8000
+        active:
+          type: boolean
+        date_creation:
+          type: string
+          format: date-time
+
+    CreateZoneDTO:
+      type: object
+      required: [nom, type, latitude_centre, longitude_centre, rayon_metres]
+      properties:
+        nom:
+          type: string
+        type:
+          type: string
+          enum: [AUTORISEE, INTERDITE]
+        latitude_centre:
+          type: number
+        longitude_centre:
+          type: number
+        rayon_metres:
+          type: integer
+          minimum: 1
+
+    ErreurDTO:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+
+  responses:
+    Introuvable:
+      description: Ressource non trouvée
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErreurDTO'
+    NonAutorise:
+      description: Token JWT manquant ou invalide
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErreurDTO'
+          example:
+            code: "TOKEN_INVALIDE"
+            message: "Token JWT manquant ou expiré"
+            timestamp: "2024-03-15T10:00:00Z"
+    AccesRefuse:
+      description: Droits insuffisants — Admin requis
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErreurDTO'
+          example:
+            code: "ACCES_REFUSE"
+            message: "Seul un Admin peut gérer les zones"
+            timestamp: "2024-03-15T10:00:00Z"

@@ -1,0 +1,527 @@
+openapi: 3.0.3
+info:
+  title: service-maintenance API
+  description: |
+    Gestion du cycle de vie complet des interventions techniques.
+    
+    ## Cycle de vie d'une maintenance
+    ```
+    SIGNALEE → PLANIFIEE → EN_COURS → TERMINEE
+                                    ↘ ANNULEE
+    ```
+    
+    ## Règles métier
+    - technicien_id obligatoire quand le statut passe à EN_COURS
+    - Une maintenance TERMINEE ne peut plus être modifiée (sauf Admin)
+    - date_planifiee doit être >= date_creation
+    - cout >= 0 si renseigné
+    - Historique conservé indéfiniment — jamais de suppression physique
+    
+    ## Impact sur les véhicules (via Kafka)
+    | Événement maintenance | Impact véhicule |
+    |---|---|
+    | SIGNALEE | véhicule → EN_PANNE |
+    | EN_COURS | véhicule → EN_MAINTENANCE |
+    | TERMINEE ou ANNULEE | véhicule → DISPONIBLE |
+    
+    ## Événements Kafka émis
+    | Événement | Déclencheur |
+    |---|---|
+    | maintenance.signaled | Intervention signalée |
+    | maintenance.planned | Intervention planifiée |
+    | maintenance.started | Démarrage |
+    | maintenance.completed | Clôture |
+    | maintenance.cancelled | Annulation |
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8083
+    description: Environnement local
+
+tags:
+  - name: Maintenances
+    description: Gestion des interventions techniques
+
+paths:
+
+  /maintenances:
+    get:
+      tags: [Maintenances]
+      summary: Liste toutes les interventions
+      parameters:
+        - name: statut
+          in: query
+          schema:
+            type: string
+            enum: [SIGNALEE, PLANIFIEE, EN_COURS, TERMINEE, ANNULEE]
+        - name: vehicule_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Liste des maintenances
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MaintenanceDTO'
+              example:
+                - id: "770e8400-e29b-41d4-a716-446655440001"
+                  vehicule_id: "550e8400-e29b-41d4-a716-446655440002"
+                  type_intervention: "Réparation moteur"
+                  description: "Bruit anormal au démarrage"
+                  statut: "SIGNALEE"
+                  technicien_id: null
+                  date_creation: "2024-03-15T09:00:00Z"
+                  date_planifiee: null
+                  date_demarrage: null
+                  date_cloture: null
+                  cout: null
+                  compte_rendu: null
+      security:
+        - bearerAuth: []
+
+    post:
+      tags: [Maintenances]
+      summary: Signaler une intervention
+      description: |
+        Crée une maintenance au statut SIGNALEE.
+        Émet **maintenance.signaled** → le véhicule passe EN_PANNE via Kafka.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMaintenanceDTO'
+            example:
+              vehicule_id: "550e8400-e29b-41d4-a716-446655440002"
+              type_intervention: "Réparation moteur"
+              description: "Bruit anormal au démarrage, fumée bleue"
+      responses:
+        '201':
+          description: Intervention signalée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceDTO'
+              example:
+                id: "770e8400-e29b-41d4-a716-446655440001"
+                vehicule_id: "550e8400-e29b-41d4-a716-446655440002"
+                type_intervention: "Réparation moteur"
+                description: "Bruit anormal au démarrage, fumée bleue"
+                statut: "SIGNALEE"
+                technicien_id: null
+                date_creation: "2024-03-15T09:00:00Z"
+                date_planifiee: null
+                date_demarrage: null
+                date_cloture: null
+                cout: null
+                compte_rendu: null
+        '400':
+          $ref: '#/components/responses/RequeteInvalide'
+        '401':
+          $ref: '#/components/responses/NonAutorise'
+      security:
+        - bearerAuth: []
+
+  /maintenances/{id}:
+    get:
+      tags: [Maintenances]
+      summary: Détail d'une intervention
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Détail de la maintenance
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceDTO'
+        '401':
+          $ref: '#/components/responses/NonAutorise'
+        '404':
+          $ref: '#/components/responses/Introuvable'
+      security:
+        - bearerAuth: []
+
+    put:
+      tags: [Maintenances]
+      summary: Modifier une intervention
+      description: Interdit si statut TERMINEE (sauf Admin)
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMaintenanceDTO'
+            example:
+              description: "Bruit anormal + fuite d'huile confirmée"
+      responses:
+        '200':
+          description: Maintenance modifiée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceDTO'
+        '403':
+          description: Modification interdite — statut TERMINEE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErreurDTO'
+              example:
+                code: "MAINTENANCE_TERMINEE"
+                message: "Une maintenance TERMINEE ne peut plus être modifiée"
+                timestamp: "2024-03-15T10:00:00Z"
+        '401':
+          $ref: '#/components/responses/NonAutorise'
+        '404':
+          $ref: '#/components/responses/Introuvable'
+      security:
+        - bearerAuth: []
+
+  /maintenances/{id}/planifier:
+    patch:
+      tags: [Maintenances]
+      summary: Planifier une intervention
+      description: |
+        SIGNALEE → PLANIFIEE.
+        Émet **maintenance.planned** sur Kafka.
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [date_planifiee, technicien_id]
+              properties:
+                date_planifiee:
+                  type: string
+                  format: date-time
+                technicien_id:
+                  type: string
+                  format: uuid
+            example:
+              date_planifiee: "2024-03-20T08:00:00Z"
+              technicien_id: "880e8400-e29b-41d4-a716-446655440001"
+      responses:
+        '200':
+          description: Intervention planifiée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceDTO'
+              example:
+                id: "770e8400-e29b-41d4-a716-446655440001"
+                vehicule_id: "550e8400-e29b-41d4-a716-446655440002"
+                type_intervention: "Réparation moteur"
+                statut: "PLANIFIEE"
+                technicien_id: "880e8400-e29b-41d4-a716-446655440001"
+                date_creation: "2024-03-15T09:00:00Z"
+                date_planifiee: "2024-03-20T08:00:00Z"
+                date_demarrage: null
+                date_cloture: null
+                cout: null
+                compte_rendu: null
+        '400':
+          description: Statut incorrect ou date invalide
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErreurDTO'
+              example:
+                code: "DATE_INVALIDE"
+                message: "La date planifiée doit être postérieure à la date de création"
+                timestamp: "2024-03-15T10:00:00Z"
+        '401':
+          $ref: '#/components/responses/NonAutorise'
+        '404':
+          $ref: '#/components/responses/Introuvable'
+      security:
+        - bearerAuth: []
+
+  /maintenances/{id}/demarrer:
+    patch:
+      tags: [Maintenances]
+      summary: Démarrer une intervention
+      description: |
+        PLANIFIEE → EN_COURS.
+        Émet **maintenance.started** → le véhicule passe EN_MAINTENANCE via Kafka.
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Intervention démarrée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceDTO'
+              example:
+                id: "770e8400-e29b-41d4-a716-446655440001"
+                statut: "EN_COURS"
+                technicien_id: "880e8400-e29b-41d4-a716-446655440001"
+                date_demarrage: "2024-03-20T08:05:00Z"
+        '400':
+          description: Statut incorrect
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErreurDTO'
+              example:
+                code: "STATUT_INCORRECT"
+                message: "Seule une maintenance PLANIFIEE peut être démarrée"
+                timestamp: "2024-03-20T08:00:00Z"
+        '401':
+          $ref: '#/components/responses/NonAutorise'
+        '404':
+          $ref: '#/components/responses/Introuvable'
+      security:
+        - bearerAuth: []
+
+  /maintenances/{id}/cloturer:
+    patch:
+      tags: [Maintenances]
+      summary: Clôturer une intervention
+      description: |
+        EN_COURS → TERMINEE.
+        Émet **maintenance.completed** → le véhicule repasse DISPONIBLE via Kafka.
+        Une fois TERMINEE, ne peut plus être modifiée sauf par Admin.
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                compte_rendu:
+                  type: string
+                cout:
+                  type: number
+                  minimum: 0
+            example:
+              compte_rendu: "Remplacement joint de culasse + vidange complète"
+              cout: 450.00
+      responses:
+        '200':
+          description: Intervention clôturée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceDTO'
+              example:
+                id: "770e8400-e29b-41d4-a716-446655440001"
+                statut: "TERMINEE"
+                compte_rendu: "Remplacement joint de culasse + vidange complète"
+                cout: 450.00
+                date_cloture: "2024-03-20T17:00:00Z"
+        '400':
+          description: Statut incorrect
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErreurDTO'
+              example:
+                code: "STATUT_INCORRECT"
+                message: "Seule une maintenance EN_COURS peut être clôturée"
+                timestamp: "2024-03-20T17:00:00Z"
+        '401':
+          $ref: '#/components/responses/NonAutorise'
+        '404':
+          $ref: '#/components/responses/Introuvable'
+      security:
+        - bearerAuth: []
+
+  /maintenances/{id}/annuler:
+    patch:
+      tags: [Maintenances]
+      summary: Annuler une intervention
+      description: |
+        SIGNALEE ou PLANIFIEE → ANNULEE.
+        Émet **maintenance.cancelled** → le véhicule repasse DISPONIBLE via Kafka.
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Intervention annulée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceDTO'
+              example:
+                id: "770e8400-e29b-41d4-a716-446655440001"
+                statut: "ANNULEE"
+                date_cloture: "2024-03-16T10:00:00Z"
+        '400':
+          description: Impossible d'annuler une intervention EN_COURS ou TERMINEE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErreurDTO'
+              example:
+                code: "ANNULATION_IMPOSSIBLE"
+                message: "Impossible d'annuler une maintenance EN_COURS ou TERMINEE"
+                timestamp: "2024-03-16T10:00:00Z"
+        '401':
+          $ref: '#/components/responses/NonAutorise'
+        '404':
+          $ref: '#/components/responses/Introuvable'
+      security:
+        - bearerAuth: []
+
+  /maintenances/vehicule/{id}:
+    get:
+      tags: [Maintenances]
+      summary: Historique des maintenances d'un véhicule
+      description: Historique conservé indéfiniment — jamais de suppression physique
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Historique des maintenances
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MaintenanceDTO'
+        '401':
+          $ref: '#/components/responses/NonAutorise'
+      security:
+        - bearerAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    IdPath:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      example: "770e8400-e29b-41d4-a716-446655440001"
+
+  schemas:
+    MaintenanceDTO:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        vehicule_id:
+          type: string
+          format: uuid
+        type_intervention:
+          type: string
+          example: "Réparation moteur"
+        description:
+          type: string
+          nullable: true
+        statut:
+          type: string
+          enum: [SIGNALEE, PLANIFIEE, EN_COURS, TERMINEE, ANNULEE]
+        technicien_id:
+          type: string
+          format: uuid
+          nullable: true
+        date_creation:
+          type: string
+          format: date-time
+        date_planifiee:
+          type: string
+          format: date-time
+          nullable: true
+        date_demarrage:
+          type: string
+          format: date-time
+          nullable: true
+        date_cloture:
+          type: string
+          format: date-time
+          nullable: true
+        cout:
+          type: number
+          nullable: true
+          example: 450.00
+        compte_rendu:
+          type: string
+          nullable: true
+
+    CreateMaintenanceDTO:
+      type: object
+      required: [vehicule_id, type_intervention]
+      properties:
+        vehicule_id:
+          type: string
+          format: uuid
+        type_intervention:
+          type: string
+        description:
+          type: string
+
+    UpdateMaintenanceDTO:
+      type: object
+      properties:
+        type_intervention:
+          type: string
+        description:
+          type: string
+
+    ErreurDTO:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+
+  responses:
+    Introuvable:
+      description: Ressource non trouvée
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErreurDTO'
+          example:
+            code: "MAINTENANCE_INTROUVABLE"
+            message: "Aucune maintenance trouvée avec cet identifiant"
+            timestamp: "2024-03-15T10:00:00Z"
+    RequeteInvalide:
+      description: Données invalides
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErreurDTO'
+    NonAutorise:
+      description: Token JWT manquant ou invalide
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErreurDTO'
+          example:
+            code: "TOKEN_INVALIDE"
+            message: "Token JWT manquant ou expiré"
+            timestamp: "2024-03-15T10:00:00Z"
+    AccesRefuse:
+      description: Droits insuffisants
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErreurDTO'

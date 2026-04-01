@@ -1,0 +1,87 @@
+# ─────────────────────────────────────────────────
+# Service service-vehicules
+# ─────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-vehicules
+  namespace: sgfv
+spec:
+  selector:
+    app: service-vehicules
+  ports:
+    - port: 8081
+      targetPort: 8081
+  type: ClusterIP
+
+---
+# ─────────────────────────────────────────────────
+# Service service-conducteurs
+# ─────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-conducteurs
+  namespace: sgfv
+spec:
+  selector:
+    app: service-conducteurs
+  ports:
+    - port: 8082
+      targetPort: 8082
+  type: ClusterIP
+
+---
+# ─────────────────────────────────────────────────
+# Service service-maintenance
+# ─────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-maintenance
+  namespace: sgfv
+spec:
+  selector:
+    app: service-maintenance
+  ports:
+    - port: 8083
+      targetPort: 8083
+  type: ClusterIP
+
+---
+# ─────────────────────────────────────────────────
+# Service service-localisation
+# ─────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-localisation
+  namespace: sgfv
+spec:
+  selector:
+    app: service-localisation
+  ports:
+    - name: rest
+      port: 8084
+      targetPort: 8084
+    - name: grpc
+      port: 3001
+      targetPort: 3001
+  type: ClusterIP
+
+---
+# ─────────────────────────────────────────────────
+# Service service-alertes
+# ─────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-alertes
+  namespace: sgfv
+spec:
+  selector:
+    app: service-alertes
+  ports:
+    - port: 3002
+      targetPort: 3002
+  type: ClusterIP

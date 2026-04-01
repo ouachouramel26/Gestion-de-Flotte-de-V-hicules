@@ -1,0 +1,13 @@
+GROUP,PACKAGE,CLASS,INSTRUCTION_MISSED,INSTRUCTION_COVERED,BRANCH_MISSED,BRANCH_COVERED,LINE_MISSED,LINE_COVERED,COMPLEXITY_MISSED,COMPLEXITY_COVERED,METHOD_MISSED,METHOD_COVERED
+service-vehicules,fr.sgfv.vehicules.exception,VehiculeHorsServiceException,0,4,0,0,0,2,0,1,0,1
+service-vehicules,fr.sgfv.vehicules.exception,TransitionStatutInvalideException,0,6,0,0,0,2,0,1,0,1
+service-vehicules,fr.sgfv.vehicules.exception,VehiculeNotFoundException,0,6,0,0,0,2,0,1,0,1
+service-vehicules,fr.sgfv.vehicules.exception,PlaqueDejaExistanteException,0,5,0,0,0,2,0,1,0,1
+service-vehicules,fr.sgfv.vehicules.exception,GlobalExceptionHandler,21,49,0,0,3,12,3,6,3,6
+service-vehicules,fr.sgfv.vehicules.exception,KilometrageInvalideException,0,6,0,0,0,2,0,1,0,1
+service-vehicules,fr.sgfv.vehicules,SecurityConfig,0,42,0,0,0,11,0,7,0,7
+service-vehicules,fr.sgfv.vehicules.service,VehiculeService,26,308,8,22,3,77,8,18,0,11
+service-vehicules,fr.sgfv.vehicules.kafka,VehiculeKafkaProducer,44,185,1,1,9,37,2,6,1,6
+service-vehicules,fr.sgfv.vehicules.kafka,ConducteurKafkaConsumer,45,138,3,5,11,45,6,10,3,8
+service-vehicules,fr.sgfv.vehicules.config,KafkaConfig,0,45,0,0,0,12,0,3,0,3
+service-vehicules,fr.sgfv.vehicules.controller,VehiculeController,20,28,0,0,3,5,3,4,3,4

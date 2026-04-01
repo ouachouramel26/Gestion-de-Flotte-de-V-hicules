@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sgfv
+  labels:
+    app: sgfv
+    environment: development

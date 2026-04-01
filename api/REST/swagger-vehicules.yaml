@@ -1,0 +1,584 @@
+openapi: 3.0.3
+info:
+  title: service-vehicules API
+  description: |
+    Gestion du parc automobile — service central du SGFV.
+    
+    ## Règles métier
+    - Plaque unique dans le système — vérification à la création et modification
+    - Kilométrage toujours croissant — ne peut jamais diminuer
+    - Suppression logique uniquement — passage à HORS_SERVICE (pas de DELETE physique)
+    - Véhicule EN_MISSION ou EN_PANNE : ne peut pas être réassigné
+    - Véhicule HORS_SERVICE : ne peut plus être modifié
+    - Assignation : vérifie que le conducteur est ACTIF et DISPONIBLE
+    
+    ## Transitions de statut autorisées
+    | Statut actuel | Transitions possibles |
+    |---|---|
+    | DISPONIBLE | EN_MISSION, EN_MAINTENANCE, EN_PANNE |
+    | EN_MISSION | DISPONIBLE, EN_PANNE |
+    | EN_MAINTENANCE | DISPONIBLE |
+    | EN_PANNE | EN_MAINTENANCE, HORS_SERVICE |
+    | HORS_SERVICE | aucune |
+    
+    ## Événements Kafka émis
+    | Événement | Déclencheur |
+    |---|---|
+    | vehicule.created | Création d'un véhicule |
+    | vehicule.status.changed | Changement de statut |
+    | vehicule.assigned | Assignation d'un conducteur |
+    | vehicule.archived | Archivage (passage à HORS_SERVICE) |
+    
+    ## Authentification
+    Token JWT Keycloak requis sur tous les endpoints.
+    ```
+    POST http://localhost:8080/realms/sgfv/protocol/openid-connect/token
+    client_id=sgfv-backend&username=admin-sgfv&password=Admin1234!&grant_type=password
+    ```
+  version: 1.0.0
+  contact:
+    name: Équipe SGFV — Université de Rouen M1 GIL
+
+servers:
+  - url: http://localhost:8081
+    description: Environnement local
+
+tags:
+  - name: Véhicules
+    description: Gestion complète du parc automobile
+
+paths:
+
+  /vehicules:
+    get:
+      tags: [Véhicules]
+      summary: Liste tous les véhicules
+      description: Retourne la liste complète des véhicules avec filtres optionnels. Les véhicules HORS_SERVICE sont inclus.
+      parameters:
+        - name: statut
+          in: query
+          description: Filtrer par statut
+          schema:
+            type: string
+            enum: [DISPONIBLE, EN_MISSION, EN_MAINTENANCE, EN_PANNE, HORS_SERVICE]
+          example: DISPONIBLE
+        - name: marque
+          in: query
+          description: Filtrer par marque (insensible à la casse)
+          schema:
+            type: string
+          example: Renault
+      responses:
+        '200':
+          description: Liste des véhicules
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/VehiculeDTO'
+              example:
+                - id: "550e8400-e29b-41d4-a716-446655440001"
+                  plaque: "AB-123-CD"
+                  marque: "Renault"
+                  modele: "Clio"
+                  annee: 2021
+                  kilometrage: 15000
+                  statut: "DISPONIBLE"
+                  conducteur_assigne_id: null
+                  date_ajout: "2024-01-15T10:00:00Z"
+                  date_modification: "2024-03-01T14:30:00Z"
+                - id: "550e8400-e29b-41d4-a716-446655440002"
+                  plaque: "EF-456-GH"
+                  marque: "Peugeot"
+                  modele: "308"
+                  annee: 2020
+                  kilometrage: 42000
+                  statut: "EN_MISSION"
+                  conducteur_assigne_id: "660e8400-e29b-41d4-a716-446655440010"
+                  date_ajout: "2023-06-10T08:00:00Z"
+                  date_modification: "2024-03-10T09:00:00Z"
+        '401':
+          $ref: '#/components/responses/NonAutorise'
+      security:
+        - bearerAuth: []
+
+    post:
+      tags: [Véhicules]
+      summary: Créer un véhicule
+      description: |
+        Crée un nouveau véhicule. La plaque doit être unique.
+        Émet l'événement **vehicule.created** sur Kafka.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateVehiculeDTO'
+            example:
+              plaque: "AB-123-CD"
+              marque: "Renault"
+              modele: "Clio"
+              annee: 2021
+              kilometrage: 0
+      responses:
+        '201':
+          description: Véhicule créé avec succès
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehiculeDTO'
+              example:
+                id: "550e8400-e29b-41d4-a716-446655440001"
+                plaque: "AB-123-CD"
+                marque: "Renault"
+                modele: "Clio"
+                annee: 2021
+                kilometrage: 0
+                statut: "DISPONIBLE"
+                conducteur_assigne_id: null
+                date_ajout: "2024-03-15T10:00:00Z"
+                date_modification: "2024-03-15T10:00:00Z"
+        '400':
+          description: Données invalides
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErreurDTO'
+              example:
+                code: "VALIDATION_ERROR"
+                message: "L'année doit être comprise entre 1900 et 2100"
+                timestamp: "2024-03-15T10:00:00Z"
+        '401':
+          $ref: '#/components/responses/NonAutorise'
+        '403':
+          $ref: '#/components/responses/AccesRefuse'
+        '409':
+          description: Plaque déjà existante
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErreurDTO'
+              example:
+                code: "PLAQUE_DEJA_EXISTANTE"
+                message: "Un véhicule avec la plaque AB-123-CD existe déjà"
+                timestamp: "2024-03-15T10:00:00Z"
+      security:
+        - bearerAuth: []
+
+  /vehicules/{id}:
+    get:
+      tags: [Véhicules]
+      summary: Détail d'un véhicule
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Détail du véhicule
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehiculeDTO'
+              example:
+                id: "550e8400-e29b-41d4-a716-446655440001"
+                plaque: "AB-123-CD"
+                marque: "Renault"
+                modele: "Clio"
+                annee: 2021
+                kilometrage: 15000
+                statut: "DISPONIBLE"
+                conducteur_assigne_id: null
+                date_ajout: "2024-01-15T10:00:00Z"
+                date_modification: "2024-03-01T14:30:00Z"
+        '401':
+          $ref: '#/components/responses/NonAutorise'
+        '404':
+          description: Véhicule introuvable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErreurDTO'
+              example:
+                code: "VEHICULE_INTROUVABLE"
+                message: "Aucun véhicule trouvé avec l'id 550e8400-e29b-41d4-a716-446655440001"
+                timestamp: "2024-03-15T10:00:00Z"
+      security:
+        - bearerAuth: []
+
+    put:
+      tags: [Véhicules]
+      summary: Modifier un véhicule
+      description: |
+        Modifie les informations d'un véhicule.
+        **Interdit si statut HORS_SERVICE.**
+        Le kilométrage ne peut qu'augmenter.
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateVehiculeDTO'
+            example:
+              kilometrage: 16500
+              modele: "Clio V"
+      responses:
+        '200':
+          description: Véhicule modifié avec succès
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehiculeDTO'
+              example:
+                id: "550e8400-e29b-41d4-a716-446655440001"
+                plaque: "AB-123-CD"
+                marque: "Renault"
+                modele: "Clio V"
+                annee: 2021
+                kilometrage: 16500
+                statut: "DISPONIBLE"
+                conducteur_assigne_id: null
+                date_ajout: "2024-01-15T10:00:00Z"
+                date_modification: "2024-03-15T11:00:00Z"
+        '400':
+          description: Kilométrage décroissant ou données invalides
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErreurDTO'
+              example:
+                code: "KILOMETRAGE_INVALIDE"
+                message: "Le kilométrage ne peut pas diminuer (actuel: 16500, reçu: 15000)"
+                timestamp: "2024-03-15T11:00:00Z"
+        '401':
+          $ref: '#/components/responses/NonAutorise'
+        '403':
+          description: Modification interdite — véhicule HORS_SERVICE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErreurDTO'
+              example:
+                code: "VEHICULE_HORS_SERVICE"
+                message: "Un véhicule HORS_SERVICE ne peut plus être modifié"
+                timestamp: "2024-03-15T11:00:00Z"
+        '404':
+          $ref: '#/components/responses/Introuvable'
+      security:
+        - bearerAuth: []
+
+    delete:
+      tags: [Véhicules]
+      summary: Archiver un véhicule (passage à HORS_SERVICE)
+      description: |
+        **Suppression logique uniquement — aucune donnée n'est effacée.**
+        Le véhicule passe au statut HORS_SERVICE et ne peut plus être modifié.
+        Émet l'événement **vehicule.archived** sur Kafka.
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Véhicule archivé — statut passé à HORS_SERVICE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehiculeDTO'
+              example:
+                id: "550e8400-e29b-41d4-a716-446655440001"
+                plaque: "AB-123-CD"
+                marque: "Renault"
+                modele: "Clio"
+                annee: 2021
+                kilometrage: 15000
+                statut: "HORS_SERVICE"
+                conducteur_assigne_id: null
+                date_ajout: "2024-01-15T10:00:00Z"
+                date_modification: "2024-03-15T12:00:00Z"
+        '401':
+          $ref: '#/components/responses/NonAutorise'
+        '404':
+          $ref: '#/components/responses/Introuvable'
+      security:
+        - bearerAuth: []
+
+  /vehicules/{id}/statut:
+    patch:
+      tags: [Véhicules]
+      summary: Changer le statut d'un véhicule
+      description: |
+        Voir tableau des transitions autorisées dans la description générale.
+        Émet l'événement **vehicule.status.changed** sur Kafka.
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [statut]
+              properties:
+                statut:
+                  type: string
+                  enum: [DISPONIBLE, EN_MISSION, EN_MAINTENANCE, EN_PANNE, HORS_SERVICE]
+            example:
+              statut: "EN_MISSION"
+      responses:
+        '200':
+          description: Statut modifié avec succès
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehiculeDTO'
+              example:
+                id: "550e8400-e29b-41d4-a716-446655440001"
+                plaque: "AB-123-CD"
+                statut: "EN_MISSION"
+                kilometrage: 15000
+                conducteur_assigne_id: "660e8400-e29b-41d4-a716-446655440010"
+                date_modification: "2024-03-15T13:00:00Z"
+        '400':
+          description: Transition de statut invalide
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErreurDTO'
+              example:
+                code: "TRANSITION_INVALIDE"
+                message: "Transition invalide : HORS_SERVICE → EN_MISSION non autorisée"
+                timestamp: "2024-03-15T13:00:00Z"
+        '401':
+          $ref: '#/components/responses/NonAutorise'
+        '404':
+          $ref: '#/components/responses/Introuvable'
+      security:
+        - bearerAuth: []
+
+  /vehicules/{id}/assigner:
+    patch:
+      tags: [Véhicules]
+      summary: Assigner un conducteur à un véhicule
+      description: |
+        Le véhicule doit être DISPONIBLE.
+        Le conducteur doit être ACTIF et DISPONIBLE.
+        Émet l'événement **vehicule.assigned** sur Kafka.
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignerVehiculeDTO'
+            example:
+              conducteur_id: "660e8400-e29b-41d4-a716-446655440010"
+      responses:
+        '200':
+          description: Conducteur assigné avec succès
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehiculeDTO'
+              example:
+                id: "550e8400-e29b-41d4-a716-446655440001"
+                plaque: "AB-123-CD"
+                statut: "DISPONIBLE"
+                conducteur_assigne_id: "660e8400-e29b-41d4-a716-446655440010"
+                date_modification: "2024-03-15T14:00:00Z"
+        '400':
+          description: Véhicule non disponible ou conducteur non éligible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErreurDTO'
+              examples:
+                vehicule_non_disponible:
+                  summary: Véhicule non disponible
+                  value:
+                    code: "VEHICULE_NON_DISPONIBLE"
+                    message: "Le véhicule doit être DISPONIBLE pour être assigné"
+                    timestamp: "2024-03-15T14:00:00Z"
+                conducteur_ineligible:
+                  summary: Conducteur non éligible
+                  value:
+                    code: "CONDUCTEUR_NON_ELIGIBLE"
+                    message: "Le conducteur doit être ACTIF et DISPONIBLE"
+                    timestamp: "2024-03-15T14:00:00Z"
+        '401':
+          $ref: '#/components/responses/NonAutorise'
+        '404':
+          $ref: '#/components/responses/Introuvable'
+      security:
+        - bearerAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token JWT obtenu depuis Keycloak (realm sgfv)
+
+  parameters:
+    IdPath:
+      name: id
+      in: path
+      required: true
+      description: Identifiant UUID du véhicule
+      schema:
+        type: string
+        format: uuid
+      example: "550e8400-e29b-41d4-a716-446655440001"
+
+  schemas:
+    VehiculeDTO:
+      type: object
+      description: Représentation complète d'un véhicule
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440001"
+        plaque:
+          type: string
+          maxLength: 20
+          example: "AB-123-CD"
+        marque:
+          type: string
+          maxLength: 50
+          example: "Renault"
+        modele:
+          type: string
+          maxLength: 50
+          example: "Clio"
+        annee:
+          type: integer
+          minimum: 1900
+          maximum: 2100
+          example: 2021
+        kilometrage:
+          type: integer
+          minimum: 0
+          example: 15000
+        statut:
+          type: string
+          enum: [DISPONIBLE, EN_MISSION, EN_MAINTENANCE, EN_PANNE, HORS_SERVICE]
+          example: "DISPONIBLE"
+        conducteur_assigne_id:
+          type: string
+          format: uuid
+          nullable: true
+          example: null
+        date_ajout:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:00:00Z"
+        date_modification:
+          type: string
+          format: date-time
+          example: "2024-03-01T14:30:00Z"
+
+    CreateVehiculeDTO:
+      type: object
+      required: [plaque, marque, modele, annee]
+      properties:
+        plaque:
+          type: string
+          maxLength: 20
+          example: "AB-123-CD"
+        marque:
+          type: string
+          maxLength: 50
+          example: "Renault"
+        modele:
+          type: string
+          maxLength: 50
+          example: "Clio"
+        annee:
+          type: integer
+          minimum: 1900
+          maximum: 2100
+          example: 2021
+        kilometrage:
+          type: integer
+          minimum: 0
+          default: 0
+          example: 0
+
+    UpdateVehiculeDTO:
+      type: object
+      description: Tous les champs sont optionnels
+      properties:
+        marque:
+          type: string
+          example: "Renault"
+        modele:
+          type: string
+          example: "Clio V"
+        annee:
+          type: integer
+          example: 2021
+        kilometrage:
+          type: integer
+          minimum: 0
+          description: Doit être supérieur ou égal au kilométrage actuel
+          example: 16500
+
+    AssignerVehiculeDTO:
+      type: object
+      required: [conducteur_id]
+      properties:
+        conducteur_id:
+          type: string
+          format: uuid
+          example: "660e8400-e29b-41d4-a716-446655440010"
+
+    ErreurDTO:
+      type: object
+      description: Format standard des erreurs de l'API
+      properties:
+        code:
+          type: string
+          description: Code d'erreur métier
+          example: "VEHICULE_INTROUVABLE"
+        message:
+          type: string
+          description: Message explicatif lisible
+          example: "Aucun véhicule trouvé avec cet identifiant"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2024-03-15T10:00:00Z"
+
+  responses:
+    Introuvable:
+      description: Ressource non trouvée
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErreurDTO'
+          example:
+            code: "VEHICULE_INTROUVABLE"
+            message: "Aucun véhicule trouvé avec cet identifiant"
+            timestamp: "2024-03-15T10:00:00Z"
+    NonAutorise:
+      description: Token JWT manquant ou invalide
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErreurDTO'
+          example:
+            code: "TOKEN_INVALIDE"
+            message: "Token JWT manquant ou expiré"
+            timestamp: "2024-03-15T10:00:00Z"
+    AccesRefuse:
+      description: Droits insuffisants pour cette opération
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErreurDTO'
+          example:
+            code: "ACCES_REFUSE"
+            message: "Vous n'avez pas les droits nécessaires pour cette opération"
+            timestamp: "2024-03-15T10:00:00Z"
