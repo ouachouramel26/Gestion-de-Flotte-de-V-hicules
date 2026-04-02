@@ -94,7 +94,7 @@ spec:
       containers:
         - name: service-conducteurs
           image: gestion_vehicules-service-conducteurs:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Never
           ports:
             - containerPort: 8082
           envFrom:
