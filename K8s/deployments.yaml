@@ -45,14 +45,15 @@ spec:
             limits:
               memory: "512Mi"
               cpu: "500m"
-          # startupProbe : laisse Spring Boot démarrer tranquillement (max 200x10s = 2000s)
+          # startupProbe : laisse Spring Boot démarrer tranquillement (max 30x10s = 300s)
           startupProbe:
             httpGet:
               path: /actuator/health
               port: 8081
-            initialDelaySeconds: 30
+            initialDelaySeconds: 60
             periodSeconds: 10
-            failureThreshold: 200
+            failureThreshold: 30
+            timeoutSeconds: 30
           # livenessProbe : redémarre si le service plante après démarrage
           livenessProbe:
             httpGet:
@@ -60,7 +61,7 @@ spec:
               port: 8081
             periodSeconds: 30
             failureThreshold: 10
-            timeoutSeconds: 10
+            timeoutSeconds: 30
           # readinessProbe : retire du load balancer si pas prêt
           readinessProbe:
             httpGet:
@@ -68,7 +69,7 @@ spec:
               port: 8081
             periodSeconds: 10
             failureThreshold: 20
-            timeoutSeconds: 10
+            timeoutSeconds: 30
 
 ---
 # ─────────────────────────────────────────────────
@@ -94,7 +95,7 @@ spec:
       containers:
         - name: service-conducteurs
           image: gestion_vehicules-service-conducteurs:latest
-          imagePullPolicy: Never
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8082
           envFrom:
@@ -122,23 +123,24 @@ spec:
             httpGet:
               path: /actuator/health
               port: 8082
-            initialDelaySeconds: 30
+            initialDelaySeconds: 60
             periodSeconds: 10
-            failureThreshold: 200
+            failureThreshold: 30
+            timeoutSeconds: 30
           livenessProbe:
             httpGet:
               path: /actuator/health
               port: 8082
             periodSeconds: 30
             failureThreshold: 10
-            timeoutSeconds: 10
+            timeoutSeconds: 30
           readinessProbe:
             httpGet:
               path: /actuator/health
               port: 8082
             periodSeconds: 10
             failureThreshold: 20
-            timeoutSeconds: 10
+            timeoutSeconds: 30
 
 ---
 # ─────────────────────────────────────────────────
@@ -192,23 +194,24 @@ spec:
             httpGet:
               path: /actuator/health
               port: 8083
-            initialDelaySeconds: 30
+            initialDelaySeconds: 60
             periodSeconds: 10
-            failureThreshold: 200
+            failureThreshold: 30
+            timeoutSeconds: 30
           livenessProbe:
             httpGet:
               path: /actuator/health
               port: 8083
             periodSeconds: 30
             failureThreshold: 10
-            timeoutSeconds: 10
+            timeoutSeconds: 30
           readinessProbe:
             httpGet:
               path: /actuator/health
               port: 8083
             periodSeconds: 10
             failureThreshold: 20
-            timeoutSeconds: 10
+            timeoutSeconds: 30
 
 ---
 # ─────────────────────────────────────────────────
@@ -328,3 +331,74 @@ spec:
             periodSeconds: 10
             failureThreshold: 10
             timeoutSeconds: 5
+
+---
+# ─────────────────────────────────────────────────
+# Deployment api-gateway (GraphQL)
+# ─────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  namespace: sgfv
+  labels:
+    app: api-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api-gateway
+  template:
+    metadata:
+      labels:
+        app: api-gateway
+    spec:
+      containers:
+        - name: api-gateway
+          image: gestion_vehicules-api-gateway:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 4000
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: PORT
+              value: "4000"
+            - name: VEHICULES_SERVICE_URL
+              value: "http://service-vehicules:8081"
+            - name: CONDUCTEURS_SERVICE_URL
+              value: "http://service-conducteurs:8082"
+            - name: MAINTENANCE_SERVICE_URL
+              value: "http://service-maintenance:8083"
+            - name: LOCALISATION_SERVICE_URL
+              value: "http://service-localisation:8084"
+            - name: ALERTES_SERVICE_URL
+              value: "http://service-alertes:3002"
+            - name: KEYCLOAK_URL
+              value: "http://keycloak:8080"
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "250m"
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 4000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 20
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 4000
+            periodSeconds: 30
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 4000
+            periodSeconds: 10
+            failureThreshold: 5

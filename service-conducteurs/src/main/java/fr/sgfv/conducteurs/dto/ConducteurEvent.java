@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Data
 @NoArgsConstructor
@@ -13,8 +14,9 @@ import java.time.LocalDateTime;
 @Builder
 public class ConducteurEvent {
     private String eventId;
-    private String eventType; // EX: CONDUCTEUR_CREATED, CONDUCTEUR_ASSIGNED
-    private Long conducteurId;
-    private Long vehiculeId;
+    private String eventType;
+    private UUID conducteurId;
+    private String keycloakId;
+    private UUID vehiculeId;
     private LocalDateTime timestamp;
 }

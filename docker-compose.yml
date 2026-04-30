@@ -83,6 +83,26 @@ services:
       timeout: 5s
       retries: 5
 
+  postgres-keycloak:
+    image: postgres:15-alpine
+    container_name: postgres-keycloak
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: keycloak_db
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: keycloak_password
+    ports:
+      - "5437:5432"
+    volumes:
+      - postgres-keycloak-data:/var/lib/postgresql/data
+    networks:
+      - fleet-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # CORRECTION : postgres-evenements → postgres-alertes
   postgres-alertes:
     image: postgres:15-alpine
@@ -108,7 +128,7 @@ services:
 
   # TimescaleDB pour la localisation GPS
   postgres-localisation:
-    image: timescale/timescaledb:latest-pg15
+    image: timescale/timescaledb-ha:pg15-all
     container_name: postgres-localisation
     restart: unless-stopped
     environment:
@@ -226,11 +246,20 @@ services:
       KC_HOSTNAME_STRICT: "false"
       KC_HOSTNAME_STRICT_HTTPS: "false"
       KC_HTTP_ENABLED: "true"
+      KC_SPI_THEME_DEFAULT_LOCALE: "fr"
+      # Database config
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres-keycloak:5432/keycloak_db
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: keycloak_password
     ports:
       - "8180:8180"
     volumes:
-      # CORRECTION : keycloak-realm.json → realm-export.json
       - ./realm-export.json:/opt/keycloak/data/import/realm-export.json
+      - ./keycloak-theme/sgfv:/opt/keycloak/themes/sgfv
+    depends_on:
+      postgres-keycloak:
+        condition: service_healthy
     networks:
       - fleet-network
     healthcheck:
@@ -342,7 +371,8 @@ services:
       SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://keycloak:8180/realms/sgfv/protocol/openid-connect/certs
       KEYCLOAK_REALM: sgfv
       KEYCLOAK_RESOURCE: sgfv-backend
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
       OTEL_SERVICE_NAME: service-vehicules
     depends_on:
       postgres-vehicules:
@@ -370,9 +400,11 @@ services:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       # On force Keycloak 8180
       SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://keycloak:8180/realms/sgfv/protocol/openid-connect/certs
+      KEYCLOAK_AUTH_SERVER_URL: http://keycloak:8180
       KEYCLOAK_REALM: sgfv
       KEYCLOAK_RESOURCE: sgfv-backend
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
       OTEL_SERVICE_NAME: service-conducteurs
     depends_on:
       postgres-conducteurs:
@@ -400,9 +432,11 @@ services:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       # On force Keycloak 8180
       SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://keycloak:8180/realms/sgfv/protocol/openid-connect/certs
+      KEYCLOAK_AUTH_SERVER_URL: http://keycloak:8180
       KEYCLOAK_REALM: sgfv
       KEYCLOAK_RESOURCE: sgfv-backend
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
       OTEL_SERVICE_NAME: service-maintenance
     depends_on:
       postgres-maintenance:
@@ -428,9 +462,10 @@ services:
       GRPC_PORT: 3001
       DATABASE_URL: postgresql://sgfv:sgfv_secret@postgres-localisation:5432/localisation_db
       KAFKA_BROKERS: kafka:29092
-      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_URL: http://keycloak:8180
       KEYCLOAK_REALM: sgfv
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
       OTEL_SERVICE_NAME: service-localisation
     depends_on:
       postgres-localisation:
@@ -454,9 +489,10 @@ services:
       PORT: 3002
       DATABASE_URL: postgresql://sgfv:sgfv_secret@postgres-alertes:5432/alertes_db
       KAFKA_BROKERS: kafka:29092
-      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_URL: http://keycloak:8180
       KEYCLOAK_REALM: sgfv
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
       OTEL_SERVICE_NAME: service-alertes
     depends_on:
       postgres-alertes:
@@ -465,6 +501,32 @@ services:
         condition: service_started
       keycloak:
         condition: service_started
+    networks:
+      - fleet-network
+
+  api-gateway:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: sgfv-gateway
+    restart: on-failure
+    ports:
+      - "4000:4000"
+    environment:
+      PORT: 4000
+      SERVICE_VEHICULES_URL: http://sgfv-vehicules:8081
+      SERVICE_CONDUCTEURS_URL: http://sgfv-conducteurs:8082
+      SERVICE_MAINTENANCE_URL: http://sgfv-maintenance:8083
+      SERVICE_LOCALISATION_URL: http://sgfv-localisation:8084
+      SERVICE_ALERTES_URL: http://sgfv-alertes:3002
+      KEYCLOAK_URL: http://keycloak:8180
+      KEYCLOAK_REALM: sgfv
+    depends_on:
+      - service-vehicules
+      - service-conducteurs
+      - service-maintenance
+      - service-localisation
+      - service-alertes
     networks:
       - fleet-network
 
@@ -478,6 +540,7 @@ volumes:
   postgres-maintenance-data:
   postgres-localisation-data:
   postgres-alertes-data:       # CORRECTION : postgres-evenements-data → postgres-alertes-data
+  postgres-keycloak-data:
   redis-data:
   zookeeper-data:
   zookeeper-logs:

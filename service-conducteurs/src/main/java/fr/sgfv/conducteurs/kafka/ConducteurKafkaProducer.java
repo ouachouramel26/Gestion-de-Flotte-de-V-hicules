@@ -23,29 +23,31 @@ public class ConducteurKafkaProducer {
     @Value("${kafka.topics.conducteur-created}")
     private String rubriqueCreated;
 
-    public void publishConducteurAssigned(Long conducteurId, Long vehiculeId) {
+    public void publishConducteurAssigned(UUID conducteurId, String keycloakId, UUID vehiculeId) {
         ConducteurEvent event = ConducteurEvent.builder()
                 .eventId(UUID.randomUUID().toString())
                 .eventType("CONDUCTEUR_ASSIGNED")
                 .conducteurId(conducteurId)
+                .keycloakId(keycloakId)
                 .vehiculeId(vehiculeId)
                 .timestamp(LocalDateTime.now())
                 .build();
                 
         // Key is vehicleId so events for the same vehicle are ordered
         kafkaTemplate.send(rubriqueAssigned, String.valueOf(vehiculeId), event);
-        log.info("Message d'assignation envoyé pour véhicule {} et conducteur {}", vehiculeId, conducteurId);
+        log.info("Message d'assignation envoyé pour véhicule {} et conducteur {}", vehiculeId, keycloakId);
     }
     
-    public void publishConducteurCreated(Long conducteurId) {
+    public void publishConducteurCreated(UUID conducteurId, String keycloakId) {
         ConducteurEvent event = ConducteurEvent.builder()
                 .eventId(UUID.randomUUID().toString())
                 .eventType("CONDUCTEUR_CREATED")
                 .conducteurId(conducteurId)
+                .keycloakId(keycloakId)
                 .timestamp(LocalDateTime.now())
                 .build();
                 
         kafkaTemplate.send(rubriqueCreated, String.valueOf(conducteurId), event);
-        log.info("Message de création envoyé pour conducteur {}", conducteurId);
+        log.info("Message de création envoyé pour conducteur {}", keycloakId);
     }
 }

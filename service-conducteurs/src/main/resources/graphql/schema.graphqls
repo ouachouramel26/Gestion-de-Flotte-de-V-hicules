@@ -1,0 +1,61 @@
+# ───────────────────────────────────────────────────────────
+# GraphQL Schema — service-conducteurs
+# ───────────────────────────────────────────────────────────
+
+enum StatutCompte {
+  ACTIF
+  INACTIF
+  SUSPENDU
+}
+
+enum DisponibiliteConducteur {
+  DISPONIBLE
+  EN_MISSION
+}
+
+type Conducteur {
+  id: ID!
+  prenom: String!
+  nom: String!
+  email: String!
+  telephone: String
+  numeroPermis: String!
+  dateExpirationPermis: String!
+  vehiculeAssigneId: ID
+  statutCompte: StatutCompte!
+  disponibilite: DisponibiliteConducteur!
+  dateCreation: String!
+}
+
+input CreerConducteurInput {
+  keycloakId: String!
+  prenom: String!
+  nom: String!
+  email: String!
+  telephone: String
+  numeroPermis: String!
+  dateExpirationPermis: String!
+}
+
+input ModifierConducteurInput {
+  prenom: String
+  nom: String
+  email: String
+  telephone: String
+  numeroPermis: String
+  dateExpirationPermis: String
+}
+
+type Query {
+  conducteurs(statutCompte: String, disponibilite: String): [Conducteur!]!
+  conducteur(id: String!): Conducteur
+  monProfil: Conducteur
+}
+
+type Mutation {
+  creerConducteur(input: CreerConducteurInput!): Conducteur!
+  modifierConducteur(id: String!, input: ModifierConducteurInput!): Conducteur!
+  changerStatutConducteur(id: String!, statutCompte: StatutCompte!): Conducteur!
+  changerDisponibiliteConducteur(id: String!, disponibilite: DisponibiliteConducteur!): Conducteur!
+  desactiverConducteur(id: String!): Conducteur!
+}

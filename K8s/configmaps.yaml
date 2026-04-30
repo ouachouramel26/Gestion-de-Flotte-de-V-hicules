@@ -93,3 +93,21 @@ data:
   OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
   OTEL_SERVICE_NAME: "service-alertes"
   ALERTE_URGENCE_REEMISSION_MS: "3600000"
+
+---
+# ─────────────────────────────────────────────────
+# ConfigMap keycloak realm (pour démarrage sans erreur)
+# ─────────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: keycloak-realm-config
+  namespace: sgfv
+data:
+
+  realm-export.json: |-
+    {
+      "realm": "sgfv",
+      "enabled": true
+    }
+  ALERTE_URGENCE_REEMISSION_MS: "3600000"

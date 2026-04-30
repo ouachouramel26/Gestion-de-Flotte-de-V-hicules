@@ -1,0 +1,345 @@
+import React, { useState, useEffect } from 'react';
+import { useKeycloak } from '@react-keycloak/web';
+import { Car, Plus, Search, Edit3, Trash2, Gauge, AlertCircle, UserPlus, ShieldCheck, Filter, Info, User } from 'lucide-react';
+import StatusBadge from '../components/StatusBadge';
+import Modal from '../components/Modal';
+
+// URLs RÉELLES du backend Spring Boot
+const API = 'http://localhost:8081/vehicules';
+const CONDUCTEURS_API = 'http://localhost:8082/api/v1/conducteurs';
+
+export default function VehiculesPage() {
+  const { keycloak } = useKeycloak();
+  const [vehicules, setVehicules] = useState([]);
+  const [conducteurs, setConducteurs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [showStatutModal, setShowStatutModal] = useState(false);
+  const [editItem, setEditItem] = useState(null);
+  const [selectedVehicule, setSelectedVehicule] = useState(null);
+  const [search, setSearch] = useState('');
+  const [filterStatut, setFilterStatut] = useState('');
+  const [errorVisible, setErrorVisible] = useState('');
+  const [statutForm, setStatutForm] = useState('');
+
+  // Formulaire aligné sur CreateVehiculeDTO / UpdateVehiculeDTO
+  const [form, setForm] = useState({ plaque: '', marque: '', modele: '', annee: '', kilometrage: 0 });
+  const [assignForm, setAssignForm] = useState({ conducteurId: '' });
+
+  const isAdmin = keycloak.hasRealmRole('admin');
+  const headers = () => ({ 'Authorization': `Bearer ${keycloak.token}`, 'Content-Type': 'application/json' });
+
+  const fetchData = async () => {
+    try {
+      // GET /vehicules?statut=X&marque=Y — backend supporte ces filtres
+      let url = API;
+      const params = new URLSearchParams();
+      if (filterStatut) params.append('statut', filterStatut);
+      if (params.toString()) url += '?' + params.toString();
+
+      const [vRes, cRes] = await Promise.allSettled([
+        fetch(url, { headers: { 'Authorization': `Bearer ${keycloak.token}` } }),
+        fetch(CONDUCTEURS_API, { headers: { 'Authorization': `Bearer ${keycloak.token}` } })
+      ]);
+      if (vRes.status === 'fulfilled' && vRes.value.ok) setVehicules(await vRes.value.json());
+      if (cRes.status === 'fulfilled' && cRes.value.ok) setConducteurs(await cRes.value.json());
+    } catch (err) { console.error('Fetch error:', err); }
+    finally { setLoading(false); }
+  };
+
+  useEffect(() => { fetchData(); }, [keycloak.token, filterStatut]);
+
+  // POST /vehicules — body = CreateVehiculeDTO {plaque, marque, modele, annee, kilometrage}
+  const handleCreate = async (e) => {
+    e.preventDefault();
+    setErrorVisible('');
+    try {
+      const res = await fetch(API, {
+        method: 'POST', headers: headers(),
+        body: JSON.stringify({ plaque: form.plaque, marque: form.marque, modele: form.modele, annee: parseInt(form.annee), kilometrage: parseInt(form.kilometrage) || 0 })
+      });
+      if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.message || 'Erreur création'); }
+      setShowModal(false); fetchData();
+    } catch (err) { setErrorVisible(err.message); }
+  };
+
+  // PUT /vehicules/:id — body = UpdateVehiculeDTO {marque, modele, annee, kilometrage}
+  const handleUpdate = async (e) => {
+    e.preventDefault();
+    setErrorVisible('');
+    try {
+      const res = await fetch(`${API}/${editItem.id}`, {
+        method: 'PUT', headers: headers(),
+        body: JSON.stringify({ marque: form.marque, modele: form.modele, annee: parseInt(form.annee), kilometrage: parseInt(form.kilometrage) || 0 })
+      });
+      if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.message || 'Erreur modification'); }
+      setShowModal(false); setEditItem(null); fetchData();
+    } catch (err) { setErrorVisible(err.message); }
+  };
+
+  // PATCH /vehicules/:id/assigner — body = AssignerVehiculeDTO {conducteurId}
+  const handleAssign = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await fetch(`${API}/${selectedVehicule.id}/assigner`, {
+        method: 'PATCH', headers: headers(),
+        body: JSON.stringify({ conducteurId: assignForm.conducteurId })
+      });
+      
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        // Si le backend renvoie une erreur 500 ou 400 avec un message d'état
+        if (res.status === 500 || res.status === 400) {
+          throw new Error(err.message || "Impossible d'assigner : ce véhicule est déjà en mission.");
+        }
+        throw new Error(err.message || "Erreur d'assignation");
+      }
+      
+      setShowAssignModal(false); 
+      fetchData();
+    } catch (err) { 
+      // On affiche le message propre à l'utilisateur
+      alert("Attention : " + err.message); 
+    }
+  };
+
+  // PATCH /vehicules/:id/statut — body = ChangerStatutDTO {statut}
+  const handleChangeStatut = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await fetch(`${API}/${selectedVehicule.id}/statut`, {
+        method: 'PATCH', headers: headers(),
+        body: JSON.stringify({ statut: statutForm })
+      });
+      if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.message || 'Transition de statut invalide'); }
+      setShowStatutModal(false); fetchData();
+    } catch (err) { alert(err.message); }
+  };
+
+  // DELETE /vehicules/:id — archivage (passage HORS_SERVICE côté backend)
+  const handleArchive = async (v) => {
+    if (!window.confirm(`Archiver le véhicule ${v.plaque} ? (Passage définitif à HORS_SERVICE)`)) return;
+    try {
+      await fetch(`${API}/${v.id}`, { method: 'DELETE', headers: headers() });
+      fetchData();
+    } catch (err) { console.error(err); }
+  };
+
+  const getDriverName = (id) => {
+    if (!id) return 'Non assigné';
+    const c = conducteurs.find(x => x.id === id);
+    return c ? `${c.nom} ${c.prenom}` : 'Non assigné';
+  };
+
+  // Transitions valides (miroir du backend)
+  const TRANSITIONS = {
+    'DISPONIBLE': ['EN_MISSION', 'EN_MAINTENANCE', 'EN_PANNE'],
+    'EN_MISSION': ['DISPONIBLE', 'EN_PANNE'],
+    'EN_MAINTENANCE': ['DISPONIBLE'],
+    'EN_PANNE': ['EN_MAINTENANCE', 'HORS_SERVICE'],
+    'HORS_SERVICE': []
+  };
+
+  const filtered = vehicules.filter(v =>
+    v.plaque?.toLowerCase().includes(search.toLowerCase()) ||
+    v.marque?.toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <div className="page-enter">
+      <div className="page-header">
+        <div>
+          <h1 className="page-title"><Car size={28} color="#2563eb" /> Parc Automobile</h1>
+          <p className="page-subtitle">{vehicules.length} véhicules enregistrés</p>
+        </div>
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <div className="search-bar"><Search size={16} /><input placeholder="Plaque, Marque..." value={search} onChange={e => setSearch(e.target.value)} /></div>
+          <div style={{display:'flex', alignItems:'center', gap:'0.5rem', background:'white', padding:'0.4rem 0.75rem', borderRadius:'8px', border:'1px solid #e2e8f0'}}>
+            <Filter size={14} color="#64748b"/>
+            <select value={filterStatut} style={{border:'none', fontSize:'0.85rem', outline:'none', background:'transparent'}} onChange={e => setFilterStatut(e.target.value)}>
+              <option value="">Tous les statuts</option>
+              <option value="DISPONIBLE">Disponible</option>
+              <option value="EN_MISSION">En mission</option>
+              <option value="EN_MAINTENANCE">En maintenance</option>
+              <option value="EN_PANNE">En panne</option>
+              <option value="HORS_SERVICE">Hors service</option>
+            </select>
+          </div>
+          {isAdmin && (
+            <button className="btn btn-primary" onClick={() => { setEditItem(null); setForm({plaque:'',marque:'',modele:'',annee:'',kilometrage:0}); setErrorVisible(''); setShowModal(true); }}>
+              <Plus size={16} /> Nouveau
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="card">
+        {loading ? <p style={{padding:'2rem', textAlign:'center'}}>Chargement...</p> : (
+          <div className="table-responsive">
+            <table className="data-table">
+              <thead>
+                <tr><th>Plaque</th><th>Véhicule</th><th>Kilométrage</th><th>Conducteur</th><th>Statut</th><th>Actions</th></tr>
+              </thead>
+              <tbody>
+                {filtered.length === 0 ? (
+                  <tr><td colSpan="6" style={{textAlign:'center', padding:'3rem', color:'#94a3b8'}}>Aucun véhicule trouvé.</td></tr>
+                ) : filtered.map(v => (
+                  <tr key={v.id} style={{ opacity: v.statut === 'HORS_SERVICE' ? 0.5 : 1 }}>
+                    <td style={{fontWeight:800, color:'#1e293b', fontSize:'1rem'}}>{v.plaque}</td>
+                    <td>
+                      <div style={{fontWeight:600}}>{v.marque} {v.modele}</div>
+                      <div style={{fontSize:'0.75rem', color:'#94a3b8'}}>Année: {v.annee}</div>
+                    </td>
+                    <td><Gauge size={14} style={{marginRight:4}}/>{v.kilometrage?.toLocaleString()} km</td>
+                    <td>
+                      <div style={{display:'flex', alignItems:'center', gap:'0.5rem'}}>
+                        <User size={14}/> {getDriverName(v.conducteurAssigneId)}
+                      </div>
+                    </td>
+                    <td><StatusBadge status={v.statut} /></td>
+                    <td>
+                      <div className="actions-cell">
+                        <button className="btn btn-secondary btn-sm" onClick={() => { setSelectedVehicule(v); setShowDetailModal(true); }} title="Détails"><Info size={14}/></button>
+                        {v.statut !== 'HORS_SERVICE' && (
+                          <>
+                            <button className="btn btn-primary btn-sm" onClick={() => { setSelectedVehicule(v); setStatutForm(''); setShowStatutModal(true); }} title="Changer statut"><ShieldCheck size={14}/></button>
+                            <button className="btn btn-primary btn-sm" onClick={() => { setSelectedVehicule(v); setAssignForm({conducteurId: v.conducteurAssigneId||''}); setShowAssignModal(true); }} title="Assigner"><UserPlus size={14}/></button>
+                            <button className="btn btn-primary btn-sm" onClick={() => { setEditItem(v); setForm({plaque:v.plaque, marque:v.marque, modele:v.modele, annee:v.annee, kilometrage:v.kilometrage}); setErrorVisible(''); setShowModal(true); }} title="Modifier"><Edit3 size={14}/></button>
+                          </>
+                        )}
+                        {isAdmin && <button className="btn btn-danger btn-sm" onClick={() => handleArchive(v)} title="Archiver"><Trash2 size={14}/></button>}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* MODALE CHANGEMENT STATUT */}
+      <Modal 
+        isOpen={showStatutModal} 
+        onClose={() => setShowStatutModal(false)} 
+        title="Changer le Statut"
+      >
+        {selectedVehicule && (
+          <>
+            <p style={{fontSize:'0.85rem', color:'#64748b', marginBottom:'1rem'}}>
+              Véhicule : <strong>{selectedVehicule.plaque}</strong> — Statut actuel : <StatusBadge status={selectedVehicule.statut} />
+            </p>
+            <form onSubmit={handleChangeStatut}>
+              <div className="form-group">
+                <label>Nouveau statut</label>
+                <select required value={statutForm} onChange={e => setStatutForm(e.target.value)}>
+                  <option value="">-- Sélectionner --</option>
+                  {(TRANSITIONS[selectedVehicule.statut] || []).map(s => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+                {TRANSITIONS[selectedVehicule.statut]?.length === 0 && (
+                  <p style={{color:'#dc2626', fontSize:'0.8rem', marginTop:'0.5rem'}}>Ce véhicule est HORS_SERVICE. Aucune transition n'est possible.</p>
+                )}
+              </div>
+              <div className="form-actions">
+                <button type="button" className="btn btn-cancel" onClick={() => setShowStatutModal(false)}>Annuler</button>
+                <button type="submit" className="btn btn-primary" disabled={!statutForm}>Confirmer</button>
+              </div>
+            </form>
+          </>
+        )}
+      </Modal>
+
+      {/* MODALE ASSIGNATION */}
+      <Modal 
+        isOpen={showAssignModal} 
+        onClose={() => setShowAssignModal(false)} 
+        title="Assigner Conducteur"
+      >
+        {selectedVehicule && (
+          <>
+            <p style={{fontSize:'0.85rem', color:'#64748b', marginBottom:'1rem'}}>Véhicule : <strong>{selectedVehicule.plaque}</strong></p>
+            <form onSubmit={handleAssign}>
+              <div className="form-group">
+                <label>Conducteur (ACTIF & DISPONIBLE)</label>
+                <select required value={assignForm.conducteurId} onChange={e => setAssignForm({conducteurId: e.target.value})}>
+                  <option value="">-- Choisir --</option>
+                  {conducteurs.filter(c => c.statutCompte === 'ACTIF' && c.disponibilite === 'DISPONIBLE').map(c => (
+                    <option key={c.id} value={c.id}>{c.nom} {c.prenom}</option>
+                  ))}
+                </select>
+                {selectedVehicule.statut !== 'DISPONIBLE' && (
+                  <p style={{color:'#dc2626', fontSize:'0.8rem', marginTop:'0.5rem', fontWeight:600}}>
+                    ⚠️ Ce véhicule est en statut "{selectedVehicule.statut}". Il doit être repassé en "DISPONIBLE" pour être assigné à un nouveau conducteur.
+                  </p>
+                )}
+              </div>
+              <div className="form-actions">
+                <button type="button" className="btn btn-cancel" onClick={() => setShowAssignModal(false)}>Annuler</button>
+                <button type="submit" className="btn btn-primary">Valider</button>
+              </div>
+            </form>
+          </>
+        )}
+      </Modal>
+
+      {/* MODALE DÉTAILS */}
+      <Modal 
+        isOpen={showDetailModal} 
+        onClose={() => setShowDetailModal(false)} 
+        title="Fiche Véhicule"
+      >
+        {selectedVehicule && (
+          <>
+            <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'1rem'}}>
+              <div><label style={{fontSize:'0.7rem',fontWeight:700,color:'#94a3b8'}}>PLAQUE</label><div style={{fontSize:'1.5rem',fontWeight:900,color:'#2563eb'}}>{selectedVehicule.plaque}</div></div>
+              <div><label style={{fontSize:'0.7rem',fontWeight:700,color:'#94a3b8'}}>STATUT</label><div><StatusBadge status={selectedVehicule.statut} /></div></div>
+              <div><label style={{fontSize:'0.7rem',fontWeight:700,color:'#94a3b8'}}>MARQUE</label><div style={{fontWeight:700}}>{selectedVehicule.marque}</div></div>
+              <div><label style={{fontSize:'0.7rem',fontWeight:700,color:'#94a3b8'}}>MODÈLE</label><div>{selectedVehicule.modele}</div></div>
+              <div><label style={{fontSize:'0.7rem',fontWeight:700,color:'#94a3b8'}}>ANNÉE</label><div>{selectedVehicule.annee}</div></div>
+              <div><label style={{fontSize:'0.7rem',fontWeight:700,color:'#94a3b8'}}>KILOMÉTRAGE</label><div style={{fontWeight:700}}>{selectedVehicule.kilometrage?.toLocaleString()} km</div></div>
+              <div><label style={{fontSize:'0.7rem',fontWeight:700,color:'#94a3b8'}}>CONDUCTEUR</label><div>{getDriverName(selectedVehicule.conducteurAssigneId)}</div></div>
+              <div><label style={{fontSize:'0.7rem',fontWeight:700,color:'#94a3b8'}}>AJOUTÉ LE</label><div style={{fontSize:'0.85rem'}}>{selectedVehicule.dateAjout ? new Date(selectedVehicule.dateAjout).toLocaleDateString() : '—'}</div></div>
+            </div>
+            <div className="form-actions" style={{marginTop:'1.5rem'}}>
+              <button className="btn btn-primary" onClick={() => setShowDetailModal(false)}>Fermer</button>
+            </div>
+          </>
+        )}
+      </Modal>
+
+      {/* MODALE CRÉATION / MODIFICATION */}
+      <Modal 
+        isOpen={showModal} 
+        onClose={() => setShowModal(false)} 
+        title={editItem ? 'Modifier Véhicule' : 'Nouveau Véhicule'}
+      >
+        <>
+          {errorVisible && <div className="alert alert-danger"><AlertCircle size={16}/> {errorVisible}</div>}
+          <form onSubmit={editItem ? handleUpdate : handleCreate}>
+            <div className="form-group">
+              <label>Plaque d'immatriculation</label>
+              <input required value={form.plaque} disabled={!!editItem} onChange={e => setForm({...form, plaque: e.target.value.toUpperCase()})} placeholder="AB-123-CD" />
+              {editItem && <p style={{fontSize:'0.7rem', color:'#94a3b8'}}>La plaque ne peut pas être modifiée.</p>}
+            </div>
+            <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0.75rem'}}>
+              <div className="form-group"><label>Marque</label><input required value={form.marque} onChange={e => setForm({...form, marque: e.target.value})} placeholder="Renault" /></div>
+              <div className="form-group"><label>Modèle</label><input required value={form.modele} onChange={e => setForm({...form, modele: e.target.value})} placeholder="Master" /></div>
+            </div>
+            <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0.75rem'}}>
+              <div className="form-group"><label>Année</label><input type="number" required min="1900" max="2100" value={form.annee} onChange={e => setForm({...form, annee: e.target.value})} /></div>
+              <div className="form-group"><label>Kilométrage</label><input type="number" min="0" value={form.kilometrage} onChange={e => setForm({...form, kilometrage: e.target.value})} /></div>
+            </div>
+            <div className="form-actions">
+              <button type="button" className="btn btn-cancel" onClick={() => setShowModal(false)}>Annuler</button>
+              <button type="submit" className="btn btn-primary">Sauvegarder</button>
+            </div>
+          </form>
+        </>
+      </Modal>
+    </div>
+  );
+}

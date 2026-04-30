@@ -1,0 +1,204 @@
+/* ================================================
+   SGFV Fleet — Custom Keycloak Login Theme
+   Blanc & Bleu Clair, Inter font, Modern look
+   ================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+/* ---- PAGE GLOBALE ---- */
+.login-pf body,
+body.login-pf {
+  background: linear-gradient(135deg, #f0f4f8 0%, #e0e7ff 50%, #dbeafe 100%) !important;
+  font-family: 'Inter', -apple-system, sans-serif !important;
+}
+
+/* ---- HEADER (bandeau en haut) ---- */
+#kc-header-wrapper {
+  font-family: 'Inter', sans-serif !important;
+  font-size: 2rem !important;
+  font-weight: 800 !important;
+  color: #2563eb !important;
+  text-align: center !important;
+  padding: 2rem 0 1rem !important;
+  letter-spacing: -0.5px !important;
+}
+
+#kc-header-wrapper::before {
+  content: '🚛 ';
+  font-size: 1.8rem;
+}
+
+/* ---- CARD DE LOGIN ---- */
+#kc-form,
+.card-pf,
+#kc-form-wrapper {
+  font-family: 'Inter', sans-serif !important;
+}
+
+.login-pf-page .card-pf {
+  background: #ffffff !important;
+  border-radius: 16px !important;
+  box-shadow: 0 20px 60px rgba(37, 99, 235, 0.12), 0 4px 12px rgba(0,0,0,0.06) !important;
+  border: 1px solid #e2e8f0 !important;
+  max-width: 440px !important;
+  margin: 0 auto !important;
+  padding: 2.5rem !important;
+}
+
+/* ---- TITRE "Se connecter" ---- */
+#kc-page-title {
+  font-family: 'Inter', sans-serif !important;
+  font-size: 1.25rem !important;
+  font-weight: 700 !important;
+  color: #1e293b !important;
+  text-align: center !important;
+  margin-bottom: 1.5rem !important;
+}
+
+/* ---- LABELS ---- */
+.login-pf-page .login-pf-accounts label,
+.control-label,
+label {
+  font-family: 'Inter', sans-serif !important;
+  font-size: 0.85rem !important;
+  font-weight: 600 !important;
+  color: #334155 !important;
+  margin-bottom: 0.4rem !important;
+}
+
+/* ---- INPUTS ---- */
+.login-pf-page .form-control,
+#username, #password,
+input[type="text"],
+input[type="password"],
+input[type="email"] {
+  font-family: 'Inter', sans-serif !important;
+  padding: 0.75rem 1rem !important;
+  border: 1.5px solid #e2e8f0 !important;
+  border-radius: 10px !important;
+  font-size: 0.95rem !important;
+  color: #1e293b !important;
+  background: #f8fafc !important;
+  transition: all 0.2s ease !important;
+  box-shadow: none !important;
+  height: auto !important;
+}
+
+.login-pf-page .form-control:focus,
+#username:focus, #password:focus {
+  border-color: #2563eb !important;
+  background: #ffffff !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1) !important;
+  outline: none !important;
+}
+
+/* ---- BOUTON CONNEXION ---- */
+#kc-login,
+.btn-primary,
+input[type="submit"] {
+  font-family: 'Inter', sans-serif !important;
+  width: 100% !important;
+  padding: 0.85rem !important;
+  background: linear-gradient(135deg, #1d4ed8, #0ea5e9) !important;
+  color: #ffffff !important;
+  border: none !important;
+  border-radius: 10px !important;
+  font-size: 1rem !important;
+  font-weight: 700 !important;
+  cursor: pointer !important;
+  box-shadow: 0 4px 15px rgba(37, 99, 235, 0.35) !important;
+  transition: all 0.2s ease !important;
+  letter-spacing: 0.025em !important;
+  margin-top: 0.5rem !important;
+  text-shadow: none !important;
+}
+
+#kc-login:hover,
+.btn-primary:hover {
+  transform: translateY(-1px) !important;
+  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.45) !important;
+  background: linear-gradient(135deg, #1e40af, #0284c7) !important;
+}
+
+/* ---- LIENS ---- */
+a {
+  color: #2563eb !important;
+  text-decoration: none !important;
+  font-weight: 500 !important;
+}
+
+a:hover {
+  color: #1d4ed8 !important;
+  text-decoration: underline !important;
+}
+
+/* ---- MESSAGES ---- */
+.alert-error,
+.kc-feedback-text {
+  background: #fee2e2 !important;
+  border: 1px solid #fecaca !important;
+  border-radius: 10px !important;
+  color: #dc2626 !important;
+  padding: 0.75rem 1rem !important;
+  font-family: 'Inter', sans-serif !important;
+  font-size: 0.875rem !important;
+}
+
+.alert-success {
+  background: #d1fae5 !important;
+  border: 1px solid #a7f3d0 !important;
+  border-radius: 10px !important;
+  color: #059669 !important;
+}
+
+.alert-warning {
+  background: #fef3c7 !important;
+  border: 1px solid #fde68a !important;
+  border-radius: 10px !important;
+  color: #d97706 !important;
+}
+
+/* ---- CHECKBOX ---- */
+#rememberMe,
+input[type="checkbox"] {
+  accent-color: #2563eb !important;
+  width: 16px !important;
+  height: 16px !important;
+}
+
+/* ---- FOOTER ---- */
+#kc-info-wrapper {
+  text-align: center !important;
+  margin-top: 1.5rem !important;
+  padding-top: 1rem !important;
+  border-top: 1px solid #e2e8f0 !important;
+}
+
+#kc-info-wrapper::after {
+  content: '© 2026 SGFV — Master 1 GIL — A. Ouachour & L. Hamitouche';
+  display: block;
+  font-size: 0.7rem;
+  color: #94a3b8;
+  margin-top: 0.75rem;
+  font-family: 'Inter', sans-serif;
+}
+
+/* ---- Supprime le background PatternFly ---- */
+.login-pf-page .login-pf-accounts,
+.login-pf-page .container-fluid {
+  padding: 0 !important;
+}
+
+.login-pf-page .login-pf-header {
+  padding-bottom: 0 !important;
+}
+
+/* ---- Powered by Keycloak = masqué ---- */
+.kc-logo-text {
+  display: none !important;
+}
+
+/* ---- Form groups spacing ---- */
+.form-group {
+  margin-bottom: 1.25rem !important;
+}

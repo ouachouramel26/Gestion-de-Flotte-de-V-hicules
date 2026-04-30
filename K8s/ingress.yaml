@@ -45,3 +45,17 @@ spec:
                 name: service-alertes
                 port:
                   number: 3002
+          - path: /graphql
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: api-gateway
+                port:
+                  number: 4000
+          - path: /auth
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: keycloak
+                port:
+                  number: 8080

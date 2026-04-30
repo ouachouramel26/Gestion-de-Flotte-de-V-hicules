@@ -6,15 +6,16 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
 public class AssignationResponseDto {
-    private Long id;
+    private UUID id;
     private ConducteurDto conducteur;
-    private Long vehiculeId;
+    private UUID vehiculeId;
     private LocalDateTime dateDebut;
     private LocalDateTime dateFin;
 }

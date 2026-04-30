@@ -166,6 +166,7 @@ type Query {
   # service-conducteurs
   conducteurs(statutCompte: StatutCompte, disponibilite: DisponibiliteConducteur): [Conducteur!]!
   conducteur(id: ID!): Conducteur
+  monProfil: Conducteur
 
   # service-maintenance
   maintenances(statut: StatutMaintenance, vehiculeId: ID): [Maintenance!]!

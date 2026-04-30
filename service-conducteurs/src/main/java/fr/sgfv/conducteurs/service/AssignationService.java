@@ -34,7 +34,7 @@ public class AssignationService {
         if (conducteur.getDateExpirationPermis().isBefore(LocalDate.now())) {
             throw new RuntimeException("Impossible d'assigner : Permis expiré");
         }
-        if (conducteur.getStatut() != fr.sgfv.conducteurs.entity.ConducteurStatut.ACTIF) {
+        if (conducteur.getStatutCompte() != fr.sgfv.conducteurs.entity.ConducteurStatut.ACTIF) {
             throw new RuntimeException("Impossible d'assigner : Conducteur inactif ou suspendu");
         }
 
@@ -59,8 +59,8 @@ public class AssignationService {
 
         Assignation savedAssignation = assignationRepository.save(newAssignation);
 
-        // 5. Publier l'événement au bus Kafka pour que service-vehicules se mette à jour ("Saga pattern" chorégraphié)
-        kafkaPublisher.publishConducteurAssigned(conducteur.getId(), request.getVehiculeId());
+        // 5. Publier l'événement avec les deux IDs (interne pour service-vehicules, Keycloak pour service-alertes)
+        kafkaPublisher.publishConducteurAssigned(conducteur.getId(), conducteur.getKeycloakId(), request.getVehiculeId());
 
         return mapToResponseDto(savedAssignation);
     }
@@ -72,8 +72,11 @@ public class AssignationService {
                         .id(assignation.getConducteur().getId())
                         .nom(assignation.getConducteur().getNom())
                         .prenom(assignation.getConducteur().getPrenom())
+                        .email(assignation.getConducteur().getEmail())
+                        .telephone(assignation.getConducteur().getTelephone())
                         .numeroPermis(assignation.getConducteur().getNumeroPermis())
-                        .statut(assignation.getConducteur().getStatut())
+                        .statutCompte(assignation.getConducteur().getStatutCompte())
+                        .disponibilite(assignation.getConducteur().getDisponibilite())
                         .build())
                 .vehiculeId(assignation.getVehiculeId())
                 .dateDebut(assignation.getDateDebut())

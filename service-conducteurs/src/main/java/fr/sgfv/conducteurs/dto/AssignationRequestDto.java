@@ -1,9 +1,10 @@
 package fr.sgfv.conducteurs.dto;
 
 import lombok.Data;
+import java.util.UUID;
 
 @Data
 public class AssignationRequestDto {
-    private Long conducteurId;
-    private Long vehiculeId;
+    private UUID conducteurId;
+    private UUID vehiculeId;
 }

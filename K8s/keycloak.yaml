@@ -32,10 +32,10 @@ spec:
           value: "true"
         resources:
           requests:
-            cpu: "200m"
+            cpu: "150m"
             memory: "256Mi"
           limits:
-            cpu: "500m"
+            cpu: "300m"
             memory: "512Mi"
         ports:
         - containerPort: 8080
@@ -45,16 +45,19 @@ spec:
             port: 8080
           failureThreshold: 180
           periodSeconds: 10
+          timeoutSeconds: 30
         livenessProbe:
           httpGet:
             path: /health/live
             port: 8080
           periodSeconds: 10
+          timeoutSeconds: 30
         readinessProbe:
           httpGet:
             path: /health/ready
             port: 8080
           periodSeconds: 10
+          timeoutSeconds: 30
         volumeMounts:
         - name: realm-config
           mountPath: /opt/keycloak/data/import/realm-export.json

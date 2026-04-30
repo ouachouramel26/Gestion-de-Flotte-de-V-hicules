@@ -17,6 +17,6 @@ CREATE TABLE IF NOT EXISTS assignations (
     CHECK (date_fin IS NULL OR date_fin > date_debut)
 );
 
-CREATE INDEX idx_assignations_conducteur ON assignations(conducteur_id);
-CREATE INDEX idx_assignations_vehicule   ON assignations(vehicule_id);
-CREATE INDEX idx_assignations_en_cours   ON assignations(conducteur_id) WHERE date_fin IS NULL;
+CREATE INDEX IF NOT EXISTS idx_assignations_conducteur ON assignations(conducteur_id);
+CREATE INDEX IF NOT EXISTS idx_assignations_vehicule   ON assignations(vehicule_id);
+CREATE INDEX IF NOT EXISTS idx_assignations_en_cours   ON assignations(conducteur_id) WHERE date_fin IS NULL;
