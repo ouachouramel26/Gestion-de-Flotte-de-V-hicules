@@ -5,6 +5,8 @@ import {
   UserCheck, UserX, AlertCircle, Calendar, Activity, Info
 } from 'lucide-react';
 
+import { toast } from 'react-hot-toast';
+
 const GRAPHQL_URL = 'http://localhost:4000/graphql';
 
 const DISPO_META = {
@@ -108,8 +110,9 @@ export default function TechniciensPage() {
       setEditItem(null);
       resetForm();
       fetchData();
+      toast.success(editItem ? 'Technicien modifié' : 'Technicien ajouté');
     } catch (err) { 
-      setErrorVisible(err.message); 
+      toast.error(err.message); 
     }
   };
 
@@ -131,7 +134,8 @@ export default function TechniciensPage() {
       const json = await res.json();
       if (json.errors) throw new Error(json.errors[0].message);
       fetchData();
-    } catch (err) { alert(err.message); }
+      toast.success('Technicien supprimé');
+    } catch (err) { toast.error(err.message); }
   };
 
   const resetForm = () => setForm({ nom: '', prenom: '', email: '', telephone: '', disponibilite: 'DISPONIBLE' });
@@ -139,7 +143,8 @@ export default function TechniciensPage() {
   const filtered = techniciens.filter(t => 
     t.nom?.toLowerCase().includes(search.toLowerCase()) ||
     t.prenom?.toLowerCase().includes(search.toLowerCase()) ||
-    t.email?.toLowerCase().includes(search.toLowerCase())
+    t.email?.toLowerCase().includes(search.toLowerCase()) ||
+    t.telephone?.toLowerCase().includes(search.toLowerCase())
   );
 
   return (
@@ -154,7 +159,7 @@ export default function TechniciensPage() {
         <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
           <div className="search-bar">
             <Search size={16} />
-            <input placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)} />
+            <input placeholder="Nom, prénom, contact..." value={search} onChange={e => setSearch(e.target.value)} />
           </div>
           {isAdmin && (
             <button className="btn btn-primary" style={{ background: '#d97706', borderColor: '#d97706' }} 

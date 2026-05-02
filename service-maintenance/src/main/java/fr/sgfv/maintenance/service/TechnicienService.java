@@ -34,6 +34,13 @@ public class TechnicienService {
 
     @Transactional
     public TechnicienDto create(TechnicienDto dto) {
+        if (technicienRepository.findFirstByEmailIgnoreCase(dto.getEmail()).isPresent()) {
+            throw new RuntimeException("Un technicien avec cet email existe déjà.");
+        }
+        if (dto.getTelephone() != null && !dto.getTelephone().isEmpty() && technicienRepository.findFirstByTelephone(dto.getTelephone()).isPresent()) {
+            throw new RuntimeException("Un technicien avec ce numéro de téléphone existe déjà.");
+        }
+
         Technicien technicien = Technicien.builder()
                 .id(dto.getId() != null ? dto.getId() : UUID.randomUUID())
                 .keycloakId(dto.getKeycloakId() != null ? dto.getKeycloakId() : UUID.randomUUID().toString())
@@ -51,7 +58,21 @@ public class TechnicienService {
     public TechnicienDto update(UUID id, TechnicienDto dto) {
         Technicien technicien = technicienRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Technicien introuvable"));
-        
+
+        // Vérifier l'unicité de l'email s'il a changé
+        if (dto.getEmail() != null && !dto.getEmail().equalsIgnoreCase(technicien.getEmail())) {
+            if (technicienRepository.findFirstByEmailIgnoreCase(dto.getEmail()).isPresent()) {
+                throw new RuntimeException("Un technicien avec cet email existe déjà.");
+            }
+        }
+
+        // Vérifier l'unicité du téléphone s'il a changé
+        if (dto.getTelephone() != null && !dto.getTelephone().isEmpty() && !dto.getTelephone().equals(technicien.getTelephone())) {
+            if (technicienRepository.findFirstByTelephone(dto.getTelephone()).isPresent()) {
+                throw new RuntimeException("Un technicien avec ce numéro de téléphone existe déjà.");
+            }
+        }
+
         technicien.setNom(dto.getNom());
         technicien.setPrenom(dto.getPrenom());
         technicien.setEmail(dto.getEmail());

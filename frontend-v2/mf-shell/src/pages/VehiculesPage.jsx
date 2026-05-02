@@ -46,7 +46,7 @@ export default function VehiculesPage() {
                 }
               }
               conducteurs {
-                id nom prenom email statutCompte disponibilite
+                id nom prenom email statutCompte disponibilite vehiculeAssigneId
               }
             }
           `,
@@ -452,7 +452,7 @@ export default function VehiculesPage() {
                 <label>Conducteur (ACTIF & DISPONIBLE)</label>
                 <select required value={assignForm.conducteurId} onChange={e => setAssignForm({ conducteurId: e.target.value })}>
                   <option value="">-- Choisir --</option>
-                  {conducteurs.filter(c => c.statutCompte === 'ACTIF' && c.disponibilite === 'DISPONIBLE').map(c => (
+                  {conducteurs.filter(c => c.statutCompte === 'ACTIF' && c.disponibilite === 'DISPONIBLE' && !c.vehiculeAssigneId).map(c => (
                     <option key={c.id} value={c.id}>{c.nom} {c.prenom}</option>
                   ))}
                 </select>

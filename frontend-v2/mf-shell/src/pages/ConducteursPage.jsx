@@ -1,3 +1,10 @@
+import React, { useState, useEffect } from 'react';
+import { useKeycloak } from '@react-keycloak/web';
+import {
+  Users, Plus, Search, Edit3, Trash2, X, Mail, Phone,
+  UserCheck, UserX, AlertCircle, Calendar, Car, Activity,
+  ShieldOff, ShieldCheck, ToggleLeft, ToggleRight, Info
+} from 'lucide-react';
 import StatusBadge from '../components/StatusBadge';
 import Modal from '../components/Modal';
 import { toast } from 'react-hot-toast';
@@ -57,6 +64,9 @@ export default function ConducteursPage({ userRole }) {
               conducteurs {
                 id prenom nom email telephone numeroPermis dateExpirationPermis
                 statutCompte disponibilite vehiculeAssigneId
+                vehiculeAssigne {
+                  plaque marque modele
+                }
               }
             }
           `
@@ -100,8 +110,8 @@ export default function ConducteursPage({ userRole }) {
 
     try {
       const query = editItem ? `
-        mutation($id: ID!, $prenom: String, $nom: String, $email: String, $telephone: String, $numeroPermis: String, $dateExpirationPermis: String) {
-          modifierConducteur(id: $id, prenom: $prenom, nom: $nom, email: $email, telephone: $telephone, numeroPermis: $numeroPermis, dateExpirationPermis: $dateExpirationPermis) {
+        mutation($id: ID!, $prenom: String, $nom: String, $email: String, $telephone: String, $numeroPermis: String, $dateExpirationPermis: String, $statutCompte: StatutCompte) {
+          modifierConducteur(id: $id, prenom: $prenom, nom: $nom, email: $email, telephone: $telephone, numeroPermis: $numeroPermis, dateExpirationPermis: $dateExpirationPermis, statutCompte: $statutCompte) {
             id
           }
         }
@@ -302,7 +312,8 @@ export default function ConducteursPage({ userRole }) {
     const matchSearch = (
       c.nom?.toLowerCase().includes(search.toLowerCase()) ||
       c.prenom?.toLowerCase().includes(search.toLowerCase()) ||
-      c.email?.toLowerCase().includes(search.toLowerCase())
+      c.email?.toLowerCase().includes(search.toLowerCase()) ||
+      c.numeroPermis?.toLowerCase().includes(search.toLowerCase())
     );
     const matchStatut = filterStatut ? c.statutCompte === filterStatut : true;
     return matchSearch && matchStatut;
@@ -400,9 +411,9 @@ export default function ConducteursPage({ userRole }) {
                         <span className={`badge ${dispoMeta.badge}`}>{dispoMeta.label}</span>
                       </td>
                       <td>
-                        {c.vehiculeAssigneId ? (
+                        {c.vehiculeAssigne ? (
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.83rem', color: '#2563eb', fontWeight: 600 }}>
-                            <Car size={13} /> {c.vehiculeAssigneId?.substring(0, 8)}...
+                            <Car size={13} /> {c.vehiculeAssigne.plaque}
                           </div>
                         ) : (
                           <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>—</span>
@@ -573,21 +584,40 @@ export default function ConducteursPage({ userRole }) {
               <button onClick={() => setShowDetailModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={20} /></button>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-              {[
-                ['NOM', `${selectedC.prenom} ${selectedC.nom}`],
-                ['EMAIL', selectedC.email],
-                ['TÉLÉPHONE', selectedC.telephone || '—'],
-                ['N° PERMIS', selectedC.numeroPermis],
-                ['EXP. PERMIS', selectedC.dateExpirationPermis?.substring(0, 10) || '—'],
-                ['STATUT COMPTE', selectedC.statutCompte],
-                ['DISPONIBILITÉ', selectedC.disponibilite],
-                ['VÉHICULE', selectedC.vehiculeAssigneId || 'Non assigné'],
-              ].map(([label, val]) => (
-                <div key={label}>
-                  <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{label}</div>
-                  <div style={{ fontWeight: 600, marginTop: '2px', fontSize: '0.9rem' }}>{val}</div>
+              <div>
+                <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Nom</div>
+                <div style={{ fontWeight: 600, marginTop: '2px', fontSize: '0.9rem' }}>{selectedC.prenom} {selectedC.nom}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Email</div>
+                <div style={{ fontWeight: 600, marginTop: '2px', fontSize: '0.9rem' }}>{selectedC.email}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Téléphone</div>
+                <div style={{ fontWeight: 600, marginTop: '2px', fontSize: '0.9rem' }}>{selectedC.telephone || '—'}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>N° Permis</div>
+                <div style={{ fontWeight: 600, marginTop: '2px', fontSize: '0.9rem' }}>{selectedC.numeroPermis}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Exp. Permis</div>
+                <div style={{ fontWeight: 600, marginTop: '2px', fontSize: '0.9rem' }}>{selectedC.dateExpirationPermis?.substring(0, 10) || '—'}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Statut Compte</div>
+                <div style={{ fontWeight: 600, marginTop: '2px', fontSize: '0.9rem' }}>{selectedC.statutCompte}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Disponibilité</div>
+                <div style={{ fontWeight: 600, marginTop: '2px', fontSize: '0.9rem' }}>{selectedC.disponibilite}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Véhicule</div>
+                <div style={{ fontWeight: 700, marginTop: '2px', fontSize: '0.9rem', color: selectedC.vehiculeAssigne ? '#2563eb' : '#94a3b8' }}>
+                  {selectedC.vehiculeAssigne ? `${selectedC.vehiculeAssigne.plaque} (${selectedC.vehiculeAssigne.marque})` : 'Non assigné'}
                 </div>
-              ))}
+              </div>
             </div>
             <div className="form-actions" style={{ marginTop: '1.5rem' }}>
               <button className="btn btn-primary" onClick={() => setShowDetailModal(false)}>Fermer</button>

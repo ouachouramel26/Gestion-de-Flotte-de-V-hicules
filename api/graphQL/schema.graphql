@@ -96,6 +96,7 @@ type Conducteur {
   vehiculeAssigneId: ID
   statutCompte: StatutCompte!
   disponibilite: DisponibiliteConducteur!
+  vehiculeAssigne: Vehicule
   dateCreation: String!
   keycloakId: String
 }
@@ -220,7 +221,7 @@ type Mutation {
 
   # service-conducteurs
   creerConducteur(keycloakId: String, prenom: String!, nom: String!, email: String!, telephone: String, numeroPermis: String!, dateExpirationPermis: String!): Conducteur!
-  modifierConducteur(id: ID!, prenom: String, nom: String, email: String, telephone: String, numeroPermis: String, dateExpirationPermis: String): Conducteur!
+  modifierConducteur(id: ID!, prenom: String, nom: String, email: String, telephone: String, numeroPermis: String, dateExpirationPermis: String, statutCompte: StatutCompte): Conducteur!
   changerStatutConducteur(id: ID!, statutCompte: StatutCompte!): Conducteur!
   changerDisponibiliteConducteur(id: ID!, disponibilite: DisponibiliteConducteur!): Conducteur!
   desactiverConducteur(id: ID!): Conducteur!

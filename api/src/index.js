@@ -272,6 +272,21 @@ const resolvers = {
       }
     }
   },
+  Conducteur: {
+    vehiculeAssigne: async (parent, _, { token }) => {
+      if (!parent.vehiculeAssigneId) return null;
+      try {
+        const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+        const res = await services.vehicules.get(`/vehicules/${parent.vehiculeAssigneId}`, {
+          headers: { Authorization: authHeader }
+        });
+        return res.data;
+      } catch (err) {
+        console.error(`[Gateway] Error fetching vehiculeAssigne for conducteur ${parent.id}: ${err.message}`);
+        return null;
+      }
+    }
+  },
 
   Mutation: {
     // Service Véhicules
@@ -311,7 +326,31 @@ const resolvers = {
         const res = await services.vehicules.patch(`/vehicules/${id}/statut`, { statut }, {
           headers: { Authorization: `Bearer ${adminToken}` }
         });
-        return res.data;
+
+        // Synchroniser la disponibilité du conducteur assigné
+        const vehicule = res.data;
+        if (vehicule && vehicule.conducteurAssigneId) {
+          try {
+            let newDispo = null;
+            if (statut === 'EN_MISSION') {
+              newDispo = 'EN_MISSION';
+            } else if (statut === 'DISPONIBLE' || statut === 'EN_MAINTENANCE' || statut === 'HORS_SERVICE') {
+              newDispo = 'DISPONIBLE';
+            }
+            if (newDispo) {
+              await services.conducteurs.patch(
+                `/api/v1/conducteurs/${vehicule.conducteurAssigneId}/disponibilite`,
+                { disponibilite: newDispo },
+                { headers: { Authorization: `Bearer ${adminToken}` } }
+              );
+              console.log(`[Gateway] Conducteur ${vehicule.conducteurAssigneId} → ${newDispo}`);
+            }
+          } catch (syncErr) {
+            console.error(`[Gateway] Erreur sync disponibilité conducteur: ${syncErr.message}`);
+          }
+        }
+
+        return vehicule;
       } catch (err) {
         console.error(`[Gateway] Erreur changerStatutVehicule: ${err.message}`, err.response?.data || '');
         throw err;

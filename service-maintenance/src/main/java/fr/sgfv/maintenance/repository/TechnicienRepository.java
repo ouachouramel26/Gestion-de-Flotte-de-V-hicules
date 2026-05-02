@@ -8,4 +8,6 @@ import java.util.UUID;
 
 public interface TechnicienRepository extends JpaRepository<Technicien, UUID> {
     Optional<Technicien> findByKeycloakId(String keycloakId);
+    Optional<Technicien> findFirstByEmailIgnoreCase(String email);
+    Optional<Technicien> findFirstByTelephone(String telephone);
 }

@@ -48,7 +48,13 @@ public class ConducteurService {
     @Transactional
     public ConducteurDto createConducteur(ConducteurDto dto) {
         if (conducteurRepository.findByNumeroPermis(dto.getNumeroPermis()).isPresent()) {
-            throw new RuntimeException("Un conducteur avec ce permis existe déjà");
+            throw new RuntimeException("Un conducteur avec ce numéro de permis existe déjà.");
+        }
+        if (conducteurRepository.findFirstByEmailIgnoreCase(dto.getEmail()).isPresent()) {
+            throw new RuntimeException("Un conducteur avec cet email existe déjà.");
+        }
+        if (dto.getTelephone() != null && !dto.getTelephone().isEmpty() && conducteurRepository.findFirstByTelephone(dto.getTelephone()).isPresent()) {
+            throw new RuntimeException("Un conducteur avec ce numéro de téléphone existe déjà.");
         }
 
         String realKeycloakId;
@@ -85,6 +91,20 @@ public class ConducteurService {
         Conducteur conducteur = conducteurRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Conducteur introuvable"));
 
+        // Vérifier l'unicité de l'email s'il a changé
+        if (dto.getEmail() != null && !dto.getEmail().equalsIgnoreCase(conducteur.getEmail())) {
+            if (conducteurRepository.findFirstByEmailIgnoreCase(dto.getEmail()).isPresent()) {
+                throw new RuntimeException("Un conducteur avec cet email existe déjà.");
+            }
+        }
+
+        // Vérifier l'unicité du téléphone s'il a changé
+        if (dto.getTelephone() != null && !dto.getTelephone().isEmpty() && !dto.getTelephone().equals(conducteur.getTelephone())) {
+            if (conducteurRepository.findFirstByTelephone(dto.getTelephone()).isPresent()) {
+                throw new RuntimeException("Un conducteur avec ce numéro de téléphone existe déjà.");
+            }
+        }
+
         if (dto.getNom() != null) conducteur.setNom(dto.getNom());
         if (dto.getPrenom() != null) conducteur.setPrenom(dto.getPrenom());
         if (dto.getEmail() != null) conducteur.setEmail(dto.getEmail());
@@ -96,6 +116,21 @@ public class ConducteurService {
             } catch (Exception e) {
                 log.warn("Format de date invalide pour conducteur {} : {}", id, dto.getDateExpirationPermis());
             }
+        }
+
+        if (dto.getStatutCompte() != null) {
+            fr.sgfv.conducteurs.entity.ConducteurStatut nouveauStatut = fr.sgfv.conducteurs.entity.ConducteurStatut.valueOf(dto.getStatutCompte());
+            // Règle métier : On ne peut pas désactiver un conducteur en mission
+            if ((nouveauStatut == fr.sgfv.conducteurs.entity.ConducteurStatut.INACTIF || nouveauStatut == fr.sgfv.conducteurs.entity.ConducteurStatut.SUSPENDU) 
+                 && conducteur.getDisponibilite() == fr.sgfv.conducteurs.entity.Disponibilite.EN_MISSION) {
+                throw new RuntimeException("Impossible de désactiver le conducteur : il est actuellement en mission.");
+            }
+            // Si on désactive, on remet en DISPONIBLE et on libère le véhicule
+            if (nouveauStatut == fr.sgfv.conducteurs.entity.ConducteurStatut.INACTIF || nouveauStatut == fr.sgfv.conducteurs.entity.ConducteurStatut.SUSPENDU) {
+                conducteur.setDisponibilite(fr.sgfv.conducteurs.entity.Disponibilite.DISPONIBLE);
+                conducteur.setVehiculeAssigneId(null);
+            }
+            conducteur.setStatutCompte(nouveauStatut);
         }
 
         Conducteur saved = conducteurRepository.save(conducteur);
@@ -118,6 +153,18 @@ public class ConducteurService {
         Conducteur conducteur = conducteurRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Conducteur introuvable"));
 
+        // Règle métier : On ne peut pas désactiver un conducteur en mission
+        if ((statut == fr.sgfv.conducteurs.entity.ConducteurStatut.INACTIF || statut == fr.sgfv.conducteurs.entity.ConducteurStatut.SUSPENDU) 
+             && conducteur.getDisponibilite() == fr.sgfv.conducteurs.entity.Disponibilite.EN_MISSION) {
+            throw new RuntimeException("Impossible de désactiver le conducteur : il est actuellement en mission.");
+        }
+
+        // Si on désactive, on remet en DISPONIBLE et on libère le véhicule
+        if (statut == fr.sgfv.conducteurs.entity.ConducteurStatut.INACTIF || statut == fr.sgfv.conducteurs.entity.ConducteurStatut.SUSPENDU) {
+            conducteur.setDisponibilite(fr.sgfv.conducteurs.entity.Disponibilite.DISPONIBLE);
+            conducteur.setVehiculeAssigneId(null);
+        }
+
         conducteur.setStatutCompte(statut);
         Conducteur saved = conducteurRepository.save(conducteur);
         return mapToDto(saved);
@@ -138,6 +185,12 @@ public class ConducteurService {
         Conducteur conducteur = conducteurRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Conducteur introuvable"));
 
+        if (conducteur.getDisponibilite() == fr.sgfv.conducteurs.entity.Disponibilite.EN_MISSION) {
+            throw new RuntimeException("Impossible de désactiver le conducteur : il est actuellement en mission.");
+        }
+
+        conducteur.setDisponibilite(fr.sgfv.conducteurs.entity.Disponibilite.DISPONIBLE);
+        conducteur.setVehiculeAssigneId(null);
         conducteur.setStatutCompte(fr.sgfv.conducteurs.entity.ConducteurStatut.SUSPENDU);
         Conducteur saved = conducteurRepository.save(conducteur);
         return mapToDto(saved);

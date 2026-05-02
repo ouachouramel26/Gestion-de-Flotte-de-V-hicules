@@ -45,11 +45,9 @@ public class AssignationService {
             log.info("Ancienne assignation terminée pour le véhicule {} (remplacement)", request.getVehiculeId());
         });
 
-        // 3. Fermer l'ancienne assignation du conducteur (s'il avait déjà un véhicule)
+        // 3. Vérifier si le conducteur est déjà assigné à un véhicule
         assignationRepository.findActiveByConducteurId(conducteur.getId()).ifPresent(activeAssignation -> {
-            activeAssignation.setDateFin(LocalDateTime.now());
-            assignationRepository.save(activeAssignation);
-            log.info("Ancienne assignation terminée pour le conducteur {}", conducteur.getId());
+            throw new RuntimeException("Ce conducteur est déjà assigné au véhicule ID: " + activeAssignation.getVehiculeId());
         });
 
         // 4. Créer la nouvelle assignation

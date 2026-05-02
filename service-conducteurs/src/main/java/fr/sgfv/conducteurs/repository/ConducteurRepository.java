@@ -9,4 +9,6 @@ import java.util.UUID;
 public interface ConducteurRepository extends JpaRepository<Conducteur, UUID> {
     Optional<Conducteur> findByNumeroPermis(String numeroPermis);
     Optional<Conducteur> findByKeycloakId(String keycloakId);
+    Optional<Conducteur> findFirstByEmailIgnoreCase(String email);
+    Optional<Conducteur> findFirstByTelephone(String telephone);
 }
