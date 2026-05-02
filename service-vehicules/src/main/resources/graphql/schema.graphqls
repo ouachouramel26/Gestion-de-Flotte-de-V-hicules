@@ -1,0 +1,31 @@
+type Query {
+    vehicules(statut: String, marque: String): [Vehicule]
+    vehicule(id: ID!): Vehicule
+}
+
+type Mutation {
+    creerVehicule(input: CreateVehiculeInput!): Vehicule
+    changerStatut(id: ID!, statut: String!): Vehicule
+    archiverVehicule(id: ID!): Vehicule
+}
+
+type Vehicule {
+    id: ID
+    plaque: String
+    marque: String
+    modele: String
+    annee: Int
+    kilometrage: Int
+    statut: String
+    conducteurAssigneId: ID
+    dateAjout: String
+    dateModification: String
+}
+
+input CreateVehiculeInput {
+    plaque: String!
+    marque: String!
+    modele: String!
+    annee: Int!
+    kilometrage: Int
+}

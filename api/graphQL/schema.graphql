@@ -21,6 +21,11 @@ enum DisponibiliteConducteur {
   EN_MISSION
 }
 
+enum DisponibiliteTechnicien {
+  DISPONIBLE
+  OCCUPE
+}
+
 enum StatutMaintenance {
   SIGNALEE
   PLANIFIEE
@@ -112,6 +117,16 @@ type Maintenance {
   compteRendu: String
 }
 
+type Technicien {
+  id: ID!
+  keycloakId: String
+  prenom: String!
+  nom: String!
+  email: String!
+  telephone: String
+  disponibilite: DisponibiliteTechnicien!
+}
+
 # ───────────────────────────────────────────────────────────
 # TYPES — service-localisation
 # ───────────────────────────────────────────────────────────
@@ -172,6 +187,8 @@ type Query {
   maintenances(statut: StatutMaintenance, vehiculeId: ID): [Maintenance!]!
   maintenance(id: ID!): Maintenance
   historiqueMaintenance(vehiculeId: ID!): [Maintenance!]!
+  techniciens: [Technicien!]!
+  technicien(id: ID!): Technicien
 
   # service-localisation
   positionsActuelles: [Position!]!
@@ -200,7 +217,7 @@ type Mutation {
   archiverVehicule(id: ID!): Vehicule!
 
   # service-conducteurs
-  creerConducteur(keycloakId: String!, prenom: String!, nom: String!, email: String!, telephone: String, numeroPermis: String!, dateExpirationPermis: String!): Conducteur!
+  creerConducteur(keycloakId: String, prenom: String!, nom: String!, email: String!, telephone: String, numeroPermis: String!, dateExpirationPermis: String!): Conducteur!
   modifierConducteur(id: ID!, prenom: String, nom: String, email: String, telephone: String, numeroPermis: String, dateExpirationPermis: String): Conducteur!
   changerStatutConducteur(id: ID!, statutCompte: StatutCompte!): Conducteur!
   changerDisponibiliteConducteur(id: ID!, disponibilite: DisponibiliteConducteur!): Conducteur!
@@ -212,6 +229,10 @@ type Mutation {
   demarrerMaintenance(id: ID!): Maintenance!
   cloturerMaintenance(id: ID!, compteRendu: String, cout: Float): Maintenance!
   annulerMaintenance(id: ID!): Maintenance!
+
+  creerTechnicien(prenom: String!, nom: String!, email: String!, telephone: String): Technicien!
+  modifierTechnicien(id: ID!, prenom: String, nom: String, email: String, telephone: String, disponibilite: DisponibiliteTechnicien): Technicien!
+  supprimerTechnicien(id: ID!): Boolean!
 
   # service-localisation
   enregistrerPosition(vehiculeId: ID!, latitude: Float!, longitude: Float!, vitesse: Float, direction: Float): Position!

@@ -5,8 +5,7 @@ import StatusBadge from '../components/StatusBadge';
 import Modal from '../components/Modal';
 
 // URLs RÉELLES du backend Spring Boot
-const API = 'http://localhost:8081/vehicules';
-const CONDUCTEURS_API = 'http://localhost:8082/api/v1/conducteurs';
+const GRAPHQL_URL = 'http://localhost:4000/graphql';
 
 export default function VehiculesPage() {
   const { keycloak } = useKeycloak();
@@ -33,18 +32,31 @@ export default function VehiculesPage() {
 
   const fetchData = async () => {
     try {
-      // GET /vehicules?statut=X&marque=Y — backend supporte ces filtres
-      let url = API;
-      const params = new URLSearchParams();
-      if (filterStatut) params.append('statut', filterStatut);
-      if (params.toString()) url += '?' + params.toString();
-
-      const [vRes, cRes] = await Promise.allSettled([
-        fetch(url, { headers: { 'Authorization': `Bearer ${keycloak.token}` } }),
-        fetch(CONDUCTEURS_API, { headers: { 'Authorization': `Bearer ${keycloak.token}` } })
-      ]);
-      if (vRes.status === 'fulfilled' && vRes.value.ok) setVehicules(await vRes.value.json());
-      if (cRes.status === 'fulfilled' && cRes.value.ok) setConducteurs(await cRes.value.json());
+      const res = await fetch(GRAPHQL_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${keycloak.token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          query: `
+            query($statut: StatutVehicule) {
+              vehicules(statut: $statut) {
+                id plaque marque modele annee kilometrage statut conducteurAssigneId dateAjout
+              }
+              conducteurs {
+                id nom prenom email statutCompte disponibilite
+              }
+            }
+          `,
+          variables: { statut: filterStatut || null }
+        })
+      });
+      const json = await res.json();
+      if (json.data) {
+        if (json.data.vehicules) setVehicules(json.data.vehicules);
+        if (json.data.conducteurs) setConducteurs(json.data.conducteurs);
+      }
     } catch (err) { console.error('Fetch error:', err); }
     finally { setLoading(false); }
   };
@@ -56,11 +68,31 @@ export default function VehiculesPage() {
     e.preventDefault();
     setErrorVisible('');
     try {
-      const res = await fetch(API, {
-        method: 'POST', headers: headers(),
-        body: JSON.stringify({ plaque: form.plaque, marque: form.marque, modele: form.modele, annee: parseInt(form.annee), kilometrage: parseInt(form.kilometrage) || 0 })
+      const res = await fetch(GRAPHQL_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${keycloak.token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          query: `
+            mutation($plaque: String!, $marque: String!, $modele: String!, $annee: Int!, $kilometrage: Int) {
+              creerVehicule(plaque: $plaque, marque: $marque, modele: $modele, annee: $annee, kilometrage: $kilometrage) {
+                id
+              }
+            }
+          `,
+          variables: {
+            plaque: form.plaque,
+            marque: form.marque,
+            modele: form.modele,
+            annee: parseInt(form.annee),
+            kilometrage: parseInt(form.kilometrage) || 0
+          }
+        })
       });
-      if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.message || 'Erreur création'); }
+      const json = await res.json();
+      if (json.errors) throw new Error(json.errors[0].message);
       setShowModal(false); fetchData();
     } catch (err) { setErrorVisible(err.message); }
   };
@@ -70,11 +102,31 @@ export default function VehiculesPage() {
     e.preventDefault();
     setErrorVisible('');
     try {
-      const res = await fetch(`${API}/${editItem.id}`, {
-        method: 'PUT', headers: headers(),
-        body: JSON.stringify({ marque: form.marque, modele: form.modele, annee: parseInt(form.annee), kilometrage: parseInt(form.kilometrage) || 0 })
+      const res = await fetch(GRAPHQL_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${keycloak.token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          query: `
+            mutation($id: ID!, $marque: String, $modele: String, $annee: Int, $kilometrage: Int) {
+              modifierVehicule(id: $id, marque: $marque, modele: $modele, annee: $annee, kilometrage: $kilometrage) {
+                id
+              }
+            }
+          `,
+          variables: {
+            id: editItem.id,
+            marque: form.marque,
+            modele: form.modele,
+            annee: parseInt(form.annee),
+            kilometrage: parseInt(form.kilometrage) || 0
+          }
+        })
       });
-      if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.message || 'Erreur modification'); }
+      const json = await res.json();
+      if (json.errors) throw new Error(json.errors[0].message);
       setShowModal(false); setEditItem(null); fetchData();
     } catch (err) { setErrorVisible(err.message); }
   };
@@ -83,37 +135,58 @@ export default function VehiculesPage() {
   const handleAssign = async (e) => {
     e.preventDefault();
     try {
-      const res = await fetch(`${API}/${selectedVehicule.id}/assigner`, {
-        method: 'PATCH', headers: headers(),
-        body: JSON.stringify({ conducteurId: assignForm.conducteurId })
+      const res = await fetch(GRAPHQL_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${keycloak.token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          query: `
+            mutation($vehiculeId: ID!, $conducteurId: ID!) {
+              assignerConducteur(vehiculeId: $vehiculeId, conducteurId: $conducteurId) {
+                id
+              }
+            }
+          `,
+          variables: {
+            vehiculeId: selectedVehicule.id,
+            conducteurId: assignForm.conducteurId
+          }
+        })
       });
-      
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        // Si le backend renvoie une erreur 500 ou 400 avec un message d'état
-        if (res.status === 500 || res.status === 400) {
-          throw new Error(err.message || "Impossible d'assigner : ce véhicule est déjà en mission.");
-        }
-        throw new Error(err.message || "Erreur d'assignation");
-      }
-      
-      setShowAssignModal(false); 
-      fetchData();
-    } catch (err) { 
-      // On affiche le message propre à l'utilisateur
-      alert("Attention : " + err.message); 
-    }
+      const json = await res.json();
+      if (json.errors) throw new Error(json.errors[0].message);
+      setShowAssignModal(false); fetchData();
+    } catch (err) { alert("Attention : " + err.message); }
   };
 
   // PATCH /vehicules/:id/statut — body = ChangerStatutDTO {statut}
   const handleChangeStatut = async (e) => {
     e.preventDefault();
     try {
-      const res = await fetch(`${API}/${selectedVehicule.id}/statut`, {
-        method: 'PATCH', headers: headers(),
-        body: JSON.stringify({ statut: statutForm })
+      const res = await fetch(GRAPHQL_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${keycloak.token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          query: `
+            mutation($id: ID!, $statut: StatutVehicule!) {
+              changerStatutVehicule(id: $id, statut: $statut) {
+                id
+              }
+            }
+          `,
+          variables: {
+            id: selectedVehicule.id,
+            statut: statutForm
+          }
+        })
       });
-      if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.message || 'Transition de statut invalide'); }
+      const json = await res.json();
+      if (json.errors) throw new Error(json.errors[0].message);
       setShowStatutModal(false); fetchData();
     } catch (err) { alert(err.message); }
   };
@@ -122,7 +195,25 @@ export default function VehiculesPage() {
   const handleArchive = async (v) => {
     if (!window.confirm(`Archiver le véhicule ${v.plaque} ? (Passage définitif à HORS_SERVICE)`)) return;
     try {
-      await fetch(`${API}/${v.id}`, { method: 'DELETE', headers: headers() });
+      const res = await fetch(GRAPHQL_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${keycloak.token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          query: `
+            mutation($id: ID!) {
+              archiverVehicule(id: $id) {
+                id
+              }
+            }
+          `,
+          variables: { id: v.id }
+        })
+      });
+      const json = await res.json();
+      if (json.errors) throw new Error(json.errors[0].message);
       fetchData();
     } catch (err) { console.error(err); }
   };

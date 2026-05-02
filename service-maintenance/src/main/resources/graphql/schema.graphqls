@@ -1,0 +1,65 @@
+# ───────────────────────────────────────────────────────────
+# GraphQL Schema — service-maintenance
+# ───────────────────────────────────────────────────────────
+
+enum StatutMaintenance {
+  SIGNALEE
+  PLANIFIEE
+  EN_COURS
+  TERMINEE
+  ANNULEE
+}
+
+type Technicien {
+  id: ID!
+  keycloakId: String!
+  prenom: String!
+  nom: String!
+  disponibilite: String!
+}
+
+type Maintenance {
+  id: ID!
+  vehiculeId: ID!
+  typeIntervention: String!
+  description: String
+  statut: StatutMaintenance!
+  technicien: Technicien
+  datePlanifiee: String
+  dateDemarrage: String
+  dateCloture: String
+  cout: Float
+  compteRendu: String
+  dateCreation: String!
+  dateModification: String!
+}
+
+input SignalerMaintenanceInput {
+  vehiculeId: String!
+  typeIntervention: String!
+  description: String
+}
+
+input PlanifierMaintenanceInput {
+  technicienId: String!
+  datePlanifiee: String!
+}
+
+input CloturerMaintenanceInput {
+  compteRendu: String
+  cout: Float
+}
+
+type Query {
+  maintenances(statut: String, vehiculeId: String): [Maintenance!]!
+  maintenance(id: String!): Maintenance
+  historiqueMaintenance(vehiculeId: String!): [Maintenance!]!
+}
+
+type Mutation {
+  signalerMaintenance(input: SignalerMaintenanceInput!): Maintenance!
+  planifierMaintenance(id: String!, input: PlanifierMaintenanceInput!): Maintenance!
+  demarrerMaintenance(id: String!): Maintenance!
+  cloturerMaintenance(id: String!, input: CloturerMaintenanceInput!): Maintenance!
+  annulerMaintenance(id: String!): Maintenance!
+}

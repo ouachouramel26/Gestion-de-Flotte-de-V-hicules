@@ -5,7 +5,7 @@ import {
   UserCheck, UserX, AlertCircle, Calendar, Activity, Info
 } from 'lucide-react';
 
-const API_BASE = 'http://localhost:8083/api/v1/techniciens';
+const GRAPHQL_URL = 'http://localhost:4000/graphql';
 
 const DISPO_META = {
   DISPONIBLE: { badge: 'badge-success', label: 'Disponible',  color: '#059669' },
@@ -37,10 +37,37 @@ export default function TechniciensPage() {
 
   const fetchData = async () => {
     try {
-      const res = await fetch(API_BASE, { headers: { 'Authorization': `Bearer ${keycloak.token}` } });
-      if (res.ok) setTechniciens(await res.json());
-    } catch (err) { console.error(err); }
-    finally { setLoading(false); }
+      const res = await fetch(GRAPHQL_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${keycloak.token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          query: `
+            query {
+              techniciens {
+                id
+                keycloakId
+                prenom
+                nom
+                email
+                telephone
+                disponibilite
+              }
+            }
+          `
+        })
+      });
+      const json = await res.json();
+      if (json.data && json.data.techniciens) {
+        setTechniciens(json.data.techniciens);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { fetchData(); }, [keycloak.token]);
@@ -49,28 +76,62 @@ export default function TechniciensPage() {
     e.preventDefault();
     setErrorVisible('');
     
-    const method = editItem ? 'PUT' : 'POST';
-    const url = editItem ? `${API_BASE}/${editItem.id}` : API_BASE;
-    
     try {
-      const res = await fetch(url, { method, headers: headers(), body: JSON.stringify(form) });
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}));
-        throw new Error(j.message || 'Erreur lors de la sauvegarde');
+      const query = editItem ? `
+        mutation($id: ID!, $prenom: String, $nom: String, $email: String, $telephone: String) {
+          modifierTechnicien(id: $id, prenom: $prenom, nom: $nom, email: $email, telephone: $telephone) {
+            id
+          }
+        }
+      ` : `
+        mutation($prenom: String!, $nom: String!, $email: String!, $telephone: String) {
+          creerTechnicien(prenom: $prenom, nom: $nom, email: $email, telephone: $telephone) {
+            id
+          }
+        }
+      `;
+
+      const variables = editItem ? { id: editItem.id, ...form } : { ...form };
+
+      const res = await fetch(GRAPHQL_URL, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({ query, variables })
+      });
+      
+      const json = await res.json();
+      if (json.errors) {
+        throw new Error(json.errors[0].message || 'Erreur de sauvegarde');
       }
+      
       setShowModal(false);
       setEditItem(null);
       resetForm();
       fetchData();
-    } catch (err) { setErrorVisible(err.message); }
+    } catch (err) { 
+      setErrorVisible(err.message); 
+    }
   };
 
   const handleDelete = async (id) => {
     if (!isAdmin || !window.confirm('Supprimer ce technicien ?')) return;
     try {
-      const res = await fetch(`${API_BASE}/${id}`, { method: 'DELETE', headers: headers() });
-      if (res.ok) fetchData();
-    } catch (err) { console.error(err); }
+      const res = await fetch(GRAPHQL_URL, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({
+          query: `
+            mutation($id: ID!) {
+              supprimerTechnicien(id: $id)
+            }
+          `,
+          variables: { id }
+        })
+      });
+      const json = await res.json();
+      if (json.errors) throw new Error(json.errors[0].message);
+      fetchData();
+    } catch (err) { alert(err.message); }
   };
 
   const resetForm = () => setForm({ nom: '', prenom: '', email: '', telephone: '', disponibilite: 'DISPONIBLE' });

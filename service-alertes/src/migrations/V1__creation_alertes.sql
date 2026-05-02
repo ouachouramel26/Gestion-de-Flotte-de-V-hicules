@@ -14,6 +14,28 @@ CREATE TABLE utilisateurs_cache (
 
 CREATE INDEX idx_utilisateurs_cache_role ON utilisateurs_cache(role);
 
+-- Cache local des véhicules (pour avoir la plaque dans les messages d'alerte)
+CREATE TABLE vehicules_cache (
+    id      UUID        NOT NULL,
+    plaque  VARCHAR(20) NOT NULL,
+    CONSTRAINT pk_vehicules_cache PRIMARY KEY (id)
+);
+
+-- Cache local des conducteurs
+CREATE TABLE conducteurs_cache (
+    id           UUID        NOT NULL,
+    keycloak_id  VARCHAR(36) NOT NULL,
+    CONSTRAINT pk_conducteurs_cache PRIMARY KEY (id)
+);
+
+-- Cache local des assignations
+CREATE TABLE vehicule_assignments_cache (
+    vehicule_id    UUID        NOT NULL,
+    conducteur_id  VARCHAR(36) NOT NULL,
+    date_assignation TIMESTAMP NOT NULL DEFAULT NOW(),
+    CONSTRAINT pk_vehicule_assignments_cache PRIMARY KEY (vehicule_id)
+);
+
 -- Table principale des alertes
 CREATE TABLE alertes (
     id                UUID        NOT NULL DEFAULT gen_random_uuid(),
@@ -22,6 +44,7 @@ CREATE TABLE alertes (
     role_destinataire VARCHAR(20) NOT NULL,
     vehicule_id       UUID        NULL,
     utilisateur_id    VARCHAR(36) NULL,
+    plaque            VARCHAR(20) NULL, -- AJOUT de la colonne manquante
     message           TEXT        NOT NULL,
     est_lu            BOOLEAN     NOT NULL DEFAULT FALSE,
     date_lecture      TIMESTAMP   NULL,
@@ -44,7 +67,6 @@ CREATE TABLE alertes (
     CONSTRAINT chk_alertes_role CHECK (role_destinataire IN (
         'CONDUCTEUR', 'TECHNICIEN', 'ADMIN'
     )),
-    -- Règle métier : date_lecture renseignée seulement si est_lu = TRUE
     CONSTRAINT chk_alertes_date_lecture
         CHECK (est_lu = TRUE OR date_lecture IS NULL)
 );
@@ -54,5 +76,4 @@ CREATE INDEX idx_alertes_niveau            ON alertes(niveau);
 CREATE INDEX idx_alertes_est_lu            ON alertes(est_lu);
 CREATE INDEX idx_alertes_utilisateur_id    ON alertes(utilisateur_id);
 CREATE INDEX idx_alertes_vehicule_id       ON alertes(vehicule_id);
--- Index pour les requêtes triées par date (les plus récentes en premier)
 CREATE INDEX idx_alertes_date_creation     ON alertes(date_creation DESC);

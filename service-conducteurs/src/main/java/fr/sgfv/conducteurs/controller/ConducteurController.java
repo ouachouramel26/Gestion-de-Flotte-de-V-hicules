@@ -32,7 +32,7 @@ public class ConducteurController {
     }
 
     @GetMapping("/me")
-    @PreAuthorize("hasRole('conducteur')")
+    @PreAuthorize("hasAnyRole('admin', 'technicien', 'conducteur')")
     public ConducteurDto getMyProfile(@org.springframework.security.core.annotation.AuthenticationPrincipal org.springframework.security.oauth2.jwt.Jwt jwt) {
         String keycloakId = jwt.getSubject();
         return conducteurService.getConducteurByKeycloakId(keycloakId);
@@ -44,5 +44,30 @@ public class ConducteurController {
     @PreAuthorize("hasRole('admin')")
     public ConducteurDto create(@RequestBody ConducteurDto dto) {
         return conducteurService.createConducteur(dto);
+    }
+
+    @PutMapping("/{id}")
+    @PreAuthorize("hasRole('admin')")
+    public ConducteurDto update(@PathVariable UUID id, @RequestBody ConducteurDto dto) {
+        return conducteurService.updateConducteur(id, dto);
+    }
+
+    @PatchMapping("/{id}/statut")
+    @PreAuthorize("hasRole('admin')")
+    public ConducteurDto changeStatut(@PathVariable UUID id, @RequestBody java.util.Map<String, String> body) {
+        return conducteurService.changeStatut(id, fr.sgfv.conducteurs.entity.ConducteurStatut.valueOf(body.get("nouveauStatut")));
+    }
+
+    @PatchMapping("/{id}/disponibilite")
+    @PreAuthorize("hasAnyRole('admin', 'technicien')")
+    public ConducteurDto changeDisponibilite(@PathVariable UUID id, @RequestBody java.util.Map<String, String> body) {
+        return conducteurService.changeDisponibilite(id, fr.sgfv.conducteurs.entity.Disponibilite.valueOf(body.get("disponibilite")));
+    }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('admin')")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(@PathVariable UUID id) {
+        conducteurService.deactivateConducteur(id);
     }
 }

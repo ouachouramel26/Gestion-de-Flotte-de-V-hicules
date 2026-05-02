@@ -149,6 +149,25 @@ const resolvers = {
       });
       return res.data;
     },
+    techniciens: async (_, __, { token }) => {
+      try {
+        const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+        const res = await services.maintenance.get('/api/v1/techniciens', {
+          headers: { Authorization: authHeader }
+        });
+        return res.data;
+      } catch (err) {
+        console.error(`[Gateway] Error fetching techniciens: ${err.message}`);
+        return [];
+      }
+    },
+    technicien: async (_, { id }, { token }) => {
+      const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+      const res = await services.maintenance.get(`/api/v1/techniciens/${id}`, {
+        headers: { Authorization: authHeader }
+      });
+      return res.data;
+    },
 
     // Service Alertes
     alertes: async (_, { niveau, estLu, typeEvenement }, { token }) => {
@@ -248,6 +267,34 @@ const resolvers = {
       });
       return res.data;
     },
+    modifierConducteur: async (_, { id, ...args }, { token }) => {
+      const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+      const res = await services.conducteurs.put(`/api/v1/conducteurs/${id}`, args, {
+        headers: { Authorization: authHeader }
+      });
+      return res.data;
+    },
+    changerStatutConducteur: async (_, { id, statutCompte }, { token }) => {
+      const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+      const res = await services.conducteurs.patch(`/api/v1/conducteurs/${id}/statut`, { nouveauStatut: statutCompte }, {
+        headers: { Authorization: authHeader }
+      });
+      return res.data;
+    },
+    changerDisponibiliteConducteur: async (_, { id, disponibilite }, { token }) => {
+      const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+      const res = await services.conducteurs.patch(`/api/v1/conducteurs/${id}/disponibilite`, { disponibilite }, {
+        headers: { Authorization: authHeader }
+      });
+      return res.data;
+    },
+    desactiverConducteur: async (_, { id }, { token }) => {
+      const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+      await services.conducteurs.delete(`/api/v1/conducteurs/${id}`, {
+        headers: { Authorization: authHeader }
+      });
+      return { id };
+    },
 
     // Service Maintenance
     signalerMaintenance: async (_, args, { token }) => {
@@ -298,6 +345,27 @@ const resolvers = {
       }
 
       return res.data;
+    },
+    creerTechnicien: async (_, args, { token }) => {
+      const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+      const res = await services.maintenance.post('/api/v1/techniciens', args, {
+        headers: { Authorization: authHeader }
+      });
+      return res.data;
+    },
+    modifierTechnicien: async (_, { id, ...args }, { token }) => {
+      const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+      const res = await services.maintenance.put(`/api/v1/techniciens/${id}`, args, {
+        headers: { Authorization: authHeader }
+      });
+      return res.data;
+    },
+    supprimerTechnicien: async (_, { id }, { token }) => {
+      const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+      await services.maintenance.delete(`/api/v1/techniciens/${id}`, {
+        headers: { Authorization: authHeader }
+      });
+      return true;
     },
 
     // Service Alertes

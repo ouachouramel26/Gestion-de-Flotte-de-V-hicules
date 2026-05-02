@@ -6,7 +6,7 @@ import {
   ShieldOff, ShieldCheck, ToggleLeft, ToggleRight, Info
 } from 'lucide-react';
 
-const API_BASE = 'http://localhost:8082/api/v1/conducteurs';
+const GRAPHQL_URL = 'http://localhost:4000/graphql';
 
 const STATUT_COMPTE_META = {
   ACTIF:    { badge: 'badge-success', label: 'Actif',    color: '#059669' },
@@ -51,10 +51,33 @@ export default function ConducteursPage({ userRole }) {
 
   const fetchData = async () => {
     try {
-      const res = await fetch(API_BASE, { headers: { 'Authorization': `Bearer ${keycloak.token}` } });
-      if (res.ok) setConducteurs(await res.json());
-    } catch (err) { console.error(err); }
-    finally { setLoading(false); }
+      const res = await fetch(GRAPHQL_URL, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({
+          query: `
+            query($statutCompte: StatutCompte, $disponibilite: DisponibiliteConducteur) {
+              conducteurs(statutCompte: $statutCompte, disponibilite: $disponibilite) {
+                id prenom nom email telephone numeroPermis dateExpirationPermis
+                statutCompte disponibilite vehiculeAssigneId keycloakId dateCreation
+              }
+            }
+          `,
+          variables: {
+            statutCompte: filterStatut || null,
+            disponibilite: null
+          }
+        })
+      });
+      const json = await res.json();
+      if (json.data && json.data.conducteurs) {
+        setConducteurs(json.data.conducteurs);
+      }
+    } catch (err) {
+      console.error('Fetch error:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { fetchData(); }, [keycloak.token]);
@@ -69,19 +92,41 @@ export default function ConducteursPage({ userRole }) {
     if (!editItem && expDate <= new Date()) { setErrorVisible("Date d'expiration du permis doit être future."); return; }
     if (form.telephone && form.telephone.replace(/\D/g, '').length < 8) { setErrorVisible("Numéro de téléphone trop court."); return; }
 
-    const method = editItem ? 'PUT' : 'POST';
-    const url    = editItem ? `${API_BASE}/${editItem.id}` : API_BASE;
     try {
-      const res = await fetch(url, { method, headers: headers(), body: JSON.stringify(form) });
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}));
-        throw new Error(j.message || 'Erreur sauvegarde (email ou permis déjà utilisé)');
+      const query = editItem ? `
+        mutation($id: ID!, $prenom: String, $nom: String, $email: String, $telephone: String, $numeroPermis: String, $dateExpirationPermis: String) {
+          modifierConducteur(id: $id, prenom: $prenom, nom: $nom, email: $email, telephone: $telephone, numeroPermis: $numeroPermis, dateExpirationPermis: $dateExpirationPermis) {
+            id
+          }
+        }
+      ` : `
+        mutation($prenom: String!, $nom: String!, $email: String!, $telephone: String, $numeroPermis: String!, $dateExpirationPermis: String!) {
+          creerConducteur(prenom: $prenom, nom: $nom, email: $email, telephone: $telephone, numeroPermis: $numeroPermis, dateExpirationPermis: $dateExpirationPermis) {
+            id
+          }
+        }
+      `;
+
+      const variables = editItem ? { id: editItem.id, ...form } : { ...form };
+      
+      const res = await fetch(GRAPHQL_URL, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({ query, variables })
+      });
+      
+      const json = await res.json();
+      if (json.errors) {
+        throw new Error(json.errors[0].message || 'Erreur lors de la sauvegarde');
       }
+      
       setShowModal(false);
       setEditItem(null);
       resetForm();
       fetchData();
-    } catch (err) { setErrorVisible(err.message); }
+    } catch (err) {
+      setErrorVisible(err.message);
+    }
   };
 
   // PATCH /statut — changer statut compte
@@ -89,11 +134,22 @@ export default function ConducteursPage({ userRole }) {
     e.preventDefault();
     setErrorVisible('');
     try {
-      const res = await fetch(`${API_BASE}/${selectedC.id}/statut`, {
-        method: 'PATCH', headers: headers(),
-        body: JSON.stringify({ nouveauStatut: statutForm })
+      const res = await fetch(GRAPHQL_URL, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({
+          query: `
+            mutation($id: ID!, $statutCompte: StatutCompte!) {
+              changerStatutConducteur(id: $id, statutCompte: $statutCompte) {
+                id
+              }
+            }
+          `,
+          variables: { id: selectedC.id, statutCompte: statutForm }
+        })
       });
-      if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.message || 'Transition impossible'); }
+      const json = await res.json();
+      if (json.errors) throw new Error(json.errors[0].message || 'Transition impossible');
       setShowStatutModal(false);
       fetchData();
     } catch (err) { setErrorVisible(err.message); }
@@ -104,11 +160,22 @@ export default function ConducteursPage({ userRole }) {
     e.preventDefault();
     setErrorVisible('');
     try {
-      const res = await fetch(`${API_BASE}/${selectedC.id}/disponibilite`, {
-        method: 'PATCH', headers: headers(),
-        body: JSON.stringify({ disponibilite: dispoForm })
+      const res = await fetch(GRAPHQL_URL, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({
+          query: `
+            mutation($id: ID!, $disponibilite: DisponibiliteConducteur!) {
+              changerDisponibiliteConducteur(id: $id, disponibilite: $disponibilite) {
+                id
+              }
+            }
+          `,
+          variables: { id: selectedC.id, disponibilite: dispoForm }
+        })
       });
-      if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.message || 'Erreur'); }
+      const json = await res.json();
+      if (json.errors) throw new Error(json.errors[0].message || 'Erreur');
       setShowDispoModal(false);
       fetchData();
     } catch (err) { setErrorVisible(err.message); }
@@ -120,12 +187,24 @@ export default function ConducteursPage({ userRole }) {
     if (c.disponibilite === 'EN_MISSION') { alert('Impossible : conducteur EN_MISSION.'); return; }
     if (!window.confirm(`Désactiver ${c.prenom} ${c.nom} ?`)) return;
     try {
-      const res = await fetch(`${API_BASE}/${c.id}`, {
-        method: 'DELETE', headers: { 'Authorization': `Bearer ${keycloak.token}` }
+      const res = await fetch(GRAPHQL_URL, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({
+          query: `
+            mutation($id: ID!) {
+              desactiverConducteur(id: $id) {
+                id
+              }
+            }
+          `,
+          variables: { id: c.id }
+        })
       });
-      if (!res.ok) { const j = await res.json().catch(() => ({})); alert(j.message || 'Erreur'); return; }
+      const json = await res.json();
+      if (json.errors) throw new Error(json.errors[0].message || 'Erreur');
       fetchData();
-    } catch (err) { console.error(err); }
+    } catch (err) { alert(err.message); }
   };
 
   const resetForm = () => setForm({
