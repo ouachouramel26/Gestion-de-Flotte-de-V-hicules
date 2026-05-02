@@ -4,6 +4,8 @@ import fr.sgfv.maintenance.dto.MaintenanceCloturerDto;
 import fr.sgfv.maintenance.dto.MaintenanceDto;
 import fr.sgfv.maintenance.dto.MaintenancePlanifierDto;
 import fr.sgfv.maintenance.dto.MaintenanceRequestDto;
+import fr.sgfv.maintenance.dto.MaintenanceDemarrerDto;
+import fr.sgfv.maintenance.dto.MaintenanceAnnulerDto;
 import fr.sgfv.maintenance.service.MaintenanceService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -42,8 +44,8 @@ public class MaintenanceController {
     }
 
     @PutMapping("/{id}/demarrer")
-    public MaintenanceDto demarrer(@PathVariable("id") UUID id) {
-        return maintenanceService.demarrerMaintenance(id);
+    public MaintenanceDto demarrer(@PathVariable("id") UUID id, @RequestBody(required = false) MaintenanceDemarrerDto request) {
+        return maintenanceService.demarrerMaintenance(id, request);
     }
 
     @PutMapping("/{id}/cloturer")
@@ -52,7 +54,7 @@ public class MaintenanceController {
     }
 
     @PutMapping("/{id}/annuler")
-    public MaintenanceDto annuler(@PathVariable("id") UUID id) {
-        return maintenanceService.annulerMaintenance(id);
+    public MaintenanceDto annuler(@PathVariable("id") UUID id, @RequestBody(required = false) MaintenanceAnnulerDto request) {
+        return maintenanceService.annulerMaintenance(id, request);
     }
 }

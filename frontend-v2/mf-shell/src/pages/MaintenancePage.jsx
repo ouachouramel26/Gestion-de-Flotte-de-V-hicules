@@ -54,6 +54,7 @@ export default function MaintenancePage({ userRole }) {
     vehiculeId: '', typeIntervention: 'REVISION', description: ''
   });
   const [planifierForm, setPlanifierForm] = useState({ datePlanifiee: '', technicienId: '' });
+  const [demarrerForm, setDemarrerForm]   = useState({ cout: 0 });
   const [cloturerForm, setCloturerForm]   = useState({ compteRendu: '', cout: 0 });
   const [annulerForm, setAnnulerForm]     = useState({ motif: '' });
   const [historiqueVehiculeId, setHistoriqueVehiculeId] = useState('');
@@ -183,18 +184,26 @@ export default function MaintenancePage({ userRole }) {
   };
 
   // ---- DÉMARRER (PATCH /demarrer) ----
-  const handleDemarrer = async () => {
+  const handleDemarrer = async (e) => {
+    if (e) e.preventDefault();
     setError('');
     try {
-      const query = `mutation($id: ID!) { demarrerMaintenance(id: $id) { id } }`;
+      const query = `mutation($id: ID!, $cout: Float) { demarrerMaintenance(id: $id, cout: $cout) { id } }`;
       const res = await fetch(GRAPHQL_URL, {
         method: 'POST',
         headers: headers(),
-        body: JSON.stringify({ query, variables: { id: selectedItem.id } })
+        body: JSON.stringify({ 
+          query, 
+          variables: { 
+            id: selectedItem.id,
+            cout: parseFloat(demarrerForm.cout)
+          } 
+        })
       });
       const json = await res.json();
       if (json.errors) throw new Error(json.errors[0].message);
       setShowDemarrer(false);
+      setDemarrerForm({ cout: 0 });
       fetchData();
       toast.success('Travaux démarrés !');
     } catch (err) { 
@@ -502,14 +511,26 @@ export default function MaintenancePage({ userRole }) {
             <p style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '0.5rem' }}>
               Le véhicule passera automatiquement à <strong>EN_MAINTENANCE</strong>.
             </p>
+            <form onSubmit={handleDemarrer} style={{ marginTop: '1.5rem', textAlign: 'left' }}>
+              <div className="form-group">
+                <label>Coût estimé (Optionnel)</label>
+                <input 
+                  type="number" 
+                  step="0.01" 
+                  placeholder="0.00"
+                  value={demarrerForm.cout}
+                  onChange={e => setDemarrerForm({ cout: e.target.value })}
+                />
+              </div>
+              <div className="form-actions">
+                <button type="button" className="btn btn-cancel" onClick={() => setShowDemarrer(false)}>Annuler</button>
+                <button type="submit" className="btn" style={{ background: '#d97706', color: 'white' }}>
+                  <PlayCircle size={16} /> Démarrer
+                </button>
+              </div>
+            </form>
           </div>
         )}
-        <div className="form-actions">
-          <button type="button" className="btn btn-cancel" onClick={() => setShowDemarrer(false)}>Annuler</button>
-          <button className="btn" style={{ background: '#d97706', color: 'white' }} onClick={handleDemarrer}>
-            <PlayCircle size={16} /> Démarrer
-          </button>
-        </div>
       </ModalWrapper>
 
       {/* ---- MODALE CLÔTURER ---- */}

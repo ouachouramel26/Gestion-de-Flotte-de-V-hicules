@@ -17,6 +17,7 @@ import java.util.UUID;
 public class MaintenanceDto {
     private UUID id;
     private UUID vehiculeId;
+    private UUID technicienId;
     private TechnicienDto technicien;
     private String typeIntervention;
     private String description;

@@ -229,9 +229,9 @@ type Mutation {
   # service-maintenance
   signalerMaintenance(vehiculeId: ID!, typeIntervention: String!, description: String): Maintenance!
   planifierMaintenance(id: ID!, datePlanifiee: String!, technicienId: ID!): Maintenance!
-  demarrerMaintenance(id: ID!): Maintenance!
+  demarrerMaintenance(id: ID!, cout: Float): Maintenance!
   cloturerMaintenance(id: ID!, compteRendu: String, cout: Float): Maintenance!
-  annulerMaintenance(id: ID!): Maintenance!
+  annulerMaintenance(id: ID!, motif: String): Maintenance!
 
   creerTechnicien(prenom: String!, nom: String!, email: String!, telephone: String): Technicien!
   modifierTechnicien(id: ID!, prenom: String, nom: String, email: String, telephone: String, disponibilite: DisponibiliteTechnicien): Technicien!

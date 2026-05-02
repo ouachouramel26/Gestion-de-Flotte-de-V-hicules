@@ -497,9 +497,9 @@ const resolvers = {
 
       return res.data;
     },
-    demarrerMaintenance: async (_, { id }, { token }) => {
+    demarrerMaintenance: async (_, { id, ...args }, { token }) => {
       const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
-      const res = await services.maintenance.put(`/api/v1/maintenances/${id}/demarrer`, {}, {
+      const res = await services.maintenance.put(`/api/v1/maintenances/${id}/demarrer`, args, {
         headers: { Authorization: authHeader }
       });
       return res.data;
@@ -509,6 +509,21 @@ const resolvers = {
       const res = await services.maintenance.put(`/api/v1/maintenances/${id}/annuler`, args, {
         headers: { Authorization: authHeader }
       });
+
+      // Orchestration : Remettre le véhicule en statut DISPONIBLE
+      try {
+        const maintenance = res.data;
+        if (maintenance && maintenance.vehiculeId) {
+          const adminToken = await getAdminToken();
+          await services.vehicules.patch(`/vehicules/${maintenance.vehiculeId}/statut`, { statut: 'DISPONIBLE' }, {
+            headers: { Authorization: `Bearer ${adminToken}` }
+          });
+          console.log(`[Gateway] Statut du véhicule ${maintenance.vehiculeId} remis à DISPONIBLE (annulation)`);
+        }
+      } catch (err) {
+        console.error(`[Gateway] Erreur synchronisation statut véhicule (annulation): ${err.message}`);
+      }
+
       return res.data;
     },
     creerTechnicien: async (_, args, { token }) => {

@@ -80,12 +80,16 @@ public class MaintenanceService {
     }
 
     @Transactional
-    public MaintenanceDto demarrerMaintenance(UUID id) {
+    public MaintenanceDto demarrerMaintenance(UUID id, MaintenanceDemarrerDto dto) {
         Maintenance maintenance = maintenanceRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Maintenance introuvable"));
 
         if (maintenance.getStatut() != MaintenanceStatut.PLANIFIEE) {
             throw new RuntimeException("La maintenance doit être à l'état PLANIFIEE pour démarrer");
+        }
+
+        if (dto != null && dto.getCout() != null) {
+            maintenance.setCout(dto.getCout());
         }
 
         maintenance.setDateDemarrage(LocalDateTime.now());
@@ -119,7 +123,7 @@ public class MaintenanceService {
     }
 
     @Transactional
-    public MaintenanceDto annulerMaintenance(UUID id) {
+    public MaintenanceDto annulerMaintenance(UUID id, MaintenanceAnnulerDto dto) {
         Maintenance maintenance = maintenanceRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Maintenance introuvable"));
 
@@ -127,6 +131,10 @@ public class MaintenanceService {
         if (maintenance.getStatut() == MaintenanceStatut.TERMINEE || 
             maintenance.getStatut() == MaintenanceStatut.ANNULEE) {
             throw new RuntimeException("Impossible d'annuler une maintenance " + maintenance.getStatut().name());
+        }
+
+        if (dto != null && dto.getMotif() != null) {
+            maintenance.setCompteRendu(dto.getMotif());
         }
 
         maintenance.setStatut(MaintenanceStatut.ANNULEE);
@@ -137,7 +145,9 @@ public class MaintenanceService {
 
     private MaintenanceDto mapToDto(Maintenance m) {
         TechnicienDto technicienDto = null;
+        UUID tId = null;
         if (m.getTechnicien() != null) {
+            tId = m.getTechnicien().getId();
             technicienDto = TechnicienDto.builder()
                     .id(m.getTechnicien().getId())
                     .keycloakId(m.getTechnicien().getKeycloakId())
@@ -150,6 +160,7 @@ public class MaintenanceService {
         return MaintenanceDto.builder()
                 .id(m.getId())
                 .vehiculeId(m.getVehiculeId())
+                .technicienId(tId)
                 .technicien(technicienDto)
                 .typeIntervention(m.getTypeIntervention())
                 .description(m.getDescription())

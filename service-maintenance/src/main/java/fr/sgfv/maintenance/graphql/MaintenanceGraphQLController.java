@@ -4,6 +4,8 @@ import fr.sgfv.maintenance.dto.MaintenanceCloturerDto;
 import fr.sgfv.maintenance.dto.MaintenanceDto;
 import fr.sgfv.maintenance.dto.MaintenancePlanifierDto;
 import fr.sgfv.maintenance.dto.MaintenanceRequestDto;
+import fr.sgfv.maintenance.dto.MaintenanceDemarrerDto;
+import fr.sgfv.maintenance.dto.MaintenanceAnnulerDto;
 import fr.sgfv.maintenance.entity.MaintenanceStatut;
 import fr.sgfv.maintenance.service.MaintenanceService;
 import lombok.RequiredArgsConstructor;
@@ -75,8 +77,14 @@ public class MaintenanceGraphQLController {
     }
 
     @MutationMapping
-    public MaintenanceDto demarrerMaintenance(@Argument String id) {
-        return maintenanceService.demarrerMaintenance(UUID.fromString(id));
+    public MaintenanceDto demarrerMaintenance(
+            @Argument String id,
+            @Argument DemarrerMaintenanceInput input) {
+        MaintenanceDemarrerDto dto = new MaintenanceDemarrerDto();
+        if (input != null) {
+            dto.setCout(input.cout());
+        }
+        return maintenanceService.demarrerMaintenance(UUID.fromString(id), dto);
     }
 
     @MutationMapping
@@ -91,7 +99,13 @@ public class MaintenanceGraphQLController {
     }
 
     @MutationMapping
-    public MaintenanceDto annulerMaintenance(@Argument String id) {
-        return maintenanceService.annulerMaintenance(UUID.fromString(id));
+    public MaintenanceDto annulerMaintenance(
+            @Argument String id,
+            @Argument AnnulerMaintenanceInput input) {
+        MaintenanceAnnulerDto dto = new MaintenanceAnnulerDto();
+        if (input != null) {
+            dto.setMotif(input.motif());
+        }
+        return maintenanceService.annulerMaintenance(UUID.fromString(id), dto);
     }
 }
