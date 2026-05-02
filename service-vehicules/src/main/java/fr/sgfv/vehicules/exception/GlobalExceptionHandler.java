@@ -36,6 +36,11 @@ public class GlobalExceptionHandler {
         return error(HttpStatus.BAD_REQUEST, "TRANSITION_INVALIDE", ex.getMessage());
     }
 
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<Map<String, Object>> handleIllegalState(IllegalStateException ex) {
+        return error(HttpStatus.BAD_REQUEST, "STATE_ERROR", ex.getMessage());
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, Object>> handleValidation(MethodArgumentNotValidException ex) {
         String message = ex.getBindingResult().getFieldErrors()

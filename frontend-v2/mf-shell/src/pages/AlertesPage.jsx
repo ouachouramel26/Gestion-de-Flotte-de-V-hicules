@@ -5,19 +5,19 @@ import {
   Car, ShieldAlert, Zap, Filter, Trash2, RefreshCw, X
 } from 'lucide-react';
 
-const API_BASE = 'http://localhost:3002/api/alertes';
+const GRAPHQL_URL = 'http://localhost:4000/graphql';
 
 // 8 types d'événements définis dans le spec
 const EVENT_TYPES = [
   { value: '', label: 'Tous les types' },
-  { value: 'VEHICULE_ASSIGNE',    label: 'Véhicule assigné' },
-  { value: 'REVISION_PLANIFIEE',  label: 'Révision planifiée' },
-  { value: 'PERMIS_EXPIRE',       label: 'Permis expirant' },
-  { value: 'SEUIL_KM_ATTEINT',   label: 'Seuil km atteint' },
-  { value: 'MAINTENANCE_TERMINEE',label: 'Maintenance terminée' },
-  { value: 'PANNE_SIGNALEE',      label: 'Panne signalée' },
-  { value: 'SORTIE_ZONE',         label: 'Sortie zone' },
-  { value: 'VITESSE_EXCESSIVE',   label: 'Vitesse excessive' },
+  { value: 'VEHICULE_ASSIGNE', label: 'Véhicule assigné' },
+  { value: 'REVISION_PLANIFIEE', label: 'Révision planifiée' },
+  { value: 'PERMIS_EXPIRE', label: 'Permis expirant' },
+  { value: 'SEUIL_KM_ATTEINT', label: 'Seuil km atteint' },
+  { value: 'MAINTENANCE_TERMINEE', label: 'Maintenance terminée' },
+  { value: 'PANNE_SIGNALEE', label: 'Panne signalée' },
+  { value: 'SORTIE_ZONE', label: 'Sortie zone' },
+  { value: 'VITESSE_EXCESSIVE', label: 'Vitesse excessive' },
 ];
 
 const NIVEAUX = ['', 'INFO', 'AVERTISSEMENT', 'CRITIQUE', 'URGENCE'];
@@ -43,27 +43,48 @@ const SEVERITY_CONFIG = {
 
 export default function AlertesPage({ userRole }) {
   const { keycloak } = useKeycloak();
-  const [alertes, setAlertes]       = useState([]);
-  const [loading, setLoading]       = useState(true);
+  const [alertes, setAlertes] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [filterMode, setFilterMode] = useState('MOI');  // MOI par défaut désormais
   const [filterNiveau, setFilterNiveau] = useState('');
-  const [filterType, setFilterType]     = useState('');
+  const [filterType, setFilterType] = useState('');
 
-  const isAdmin      = keycloak.hasRealmRole('admin');
+  const isAdmin = keycloak.hasRealmRole('admin');
   const isConducteur = keycloak.hasRealmRole('conducteur') && !isAdmin;
 
   const fetchAlertes = useCallback(async () => {
-    const h = { 'Authorization': `Bearer ${keycloak.token}` };
     try {
-      // /alertes/moi pour le mode personnel, sinon /alertes
-      const endpoint = (filterMode === 'MOI')
-        ? `${API_BASE}/moi`
-        : API_BASE;
-      const res = await fetch(endpoint, { headers: h });
-      if (res.ok) setAlertes(await res.json());
+      const query = `
+        query($niveau: NiveauAlerte, $typeEvenement: TypeEvenementAlerte) {
+          alertes(niveau: $niveau, typeEvenement: $typeEvenement) {
+            id typeEvenement niveau message vehiculeId utilisateurId estLu dateCreation
+          }
+          mesAlertes {
+            id typeEvenement niveau message vehiculeId utilisateurId estLu dateCreation
+          }
+        }
+      `;
+      const res = await fetch(GRAPHQL_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${keycloak.token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          query,
+          variables: {
+            niveau: filterNiveau || null,
+            typeEvenement: filterType || null
+          }
+        })
+      });
+      const json = await res.json();
+      if (json.data) {
+        setAlertes(filterMode === 'MOI' ? json.data.mesAlertes : json.data.alertes);
+      }
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
-  }, [keycloak.token, filterMode, isConducteur]);
+  }, [keycloak.token, filterMode, filterNiveau, filterType]);
 
   useEffect(() => { fetchAlertes(); }, [fetchAlertes]);
 
@@ -76,9 +97,16 @@ export default function AlertesPage({ userRole }) {
   // PATCH /alertes/:id/lire
   const handleLire = async (id) => {
     try {
-      await fetch(`${API_BASE}/${id}/lire`, {
-        method: 'PATCH',
-        headers: { 'Authorization': `Bearer ${keycloak.token}` }
+      await fetch(GRAPHQL_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${keycloak.token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          query: `mutation($id: ID!) { lireAlerte(id: $id) { id estLu } }`,
+          variables: { id }
+        })
       });
       fetchAlertes();
     } catch (err) { console.error(err); }
@@ -103,7 +131,7 @@ export default function AlertesPage({ userRole }) {
       fetch(`${API_BASE}/${a.id}/lire`, {
         method: 'PATCH',
         headers: { 'Authorization': `Bearer ${keycloak.token}` }
-      }).catch(() => {})
+      }).catch(() => { })
     ));
     fetchAlertes();
   };
@@ -111,8 +139,8 @@ export default function AlertesPage({ userRole }) {
   // Filtrage local
   let filtered = [...alertes];
   if (filterMode === 'UNREAD') filtered = filtered.filter(a => !a.estLu);
-  if (filterNiveau)            filtered = filtered.filter(a => a.niveau === filterNiveau || a.severite === filterNiveau);
-  if (filterType)              filtered = filtered.filter(a => a.typeEvenement === filterType);
+  if (filterNiveau) filtered = filtered.filter(a => a.niveau === filterNiveau || a.severite === filterNiveau);
+  if (filterType) filtered = filtered.filter(a => a.typeEvenement === filterType);
 
   // Tri : non lus d'abord, puis par date desc
   filtered.sort((a, b) => {
@@ -120,7 +148,7 @@ export default function AlertesPage({ userRole }) {
     return new Date(b.dateCreation) - new Date(a.dateCreation);
   });
 
-  const nonLuCount   = alertes.filter(a => !a.estLu).length;
+  const nonLuCount = alertes.filter(a => !a.estLu).length;
   const urgenceCount = alertes.filter(a => !a.estLu && (a.niveau === 'URGENCE' || a.severite === 'URGENCE')).length;
 
   return (
@@ -257,9 +285,9 @@ export default function AlertesPage({ userRole }) {
                           <Eye size={11} /> Lu le {new Date(a.dateLecture).toLocaleString('fr-FR')}
                         </span>
                       )}
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', color: '#2563eb', fontWeight: 600 }}>
-                          <Car size={11} /> {a.plaque || (a.vehiculeId ? a.vehiculeId.substring(0, 8) + '...' : '—')}
-                        </span>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', color: '#2563eb', fontWeight: 600 }}>
+                        <Car size={11} /> {a.plaque || (a.vehiculeId ? a.vehiculeId.substring(0, 8) + '...' : '—')}
+                      </span>
                       {a.roleDestinataire && (
                         <span style={{ background: '#f1f5f9', padding: '0.1rem 0.5rem', borderRadius: '6px', fontWeight: 600 }}>
                           → {a.roleDestinataire}

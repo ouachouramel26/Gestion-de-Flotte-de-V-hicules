@@ -1,38 +1,35 @@
-import React, { useState, useEffect } from 'react';
-import { useKeycloak } from '@react-keycloak/web';
-import {
-  Users, Plus, Search, Edit3, Trash2, X, Mail, Phone,
-  UserCheck, UserX, AlertCircle, Calendar, Car, Activity,
-  ShieldOff, ShieldCheck, ToggleLeft, ToggleRight, Info
-} from 'lucide-react';
+import StatusBadge from '../components/StatusBadge';
+import Modal from '../components/Modal';
+import { toast } from 'react-hot-toast';
 
 const GRAPHQL_URL = 'http://localhost:4000/graphql';
 
 const STATUT_COMPTE_META = {
-  ACTIF:    { badge: 'badge-success', label: 'Actif',    color: '#059669' },
-  INACTIF:  { badge: 'badge-gray',    label: 'Inactif',  color: '#64748b' },
-  SUSPENDU: { badge: 'badge-danger',  label: 'Suspendu', color: '#dc2626' }
+  ACTIF: { badge: 'badge-success', label: 'Actif', color: '#059669' },
+  INACTIF: { badge: 'badge-gray', label: 'Inactif', color: '#64748b' },
+  SUSPENDU: { badge: 'badge-danger', label: 'Suspendu', color: '#dc2626' }
 };
 const DISPO_META = {
-  DISPONIBLE: { badge: 'badge-success', label: 'Disponible',  color: '#059669' },
-  EN_MISSION: { badge: 'badge-info',    label: 'En mission',  color: '#2563eb' }
+  DISPONIBLE: { badge: 'badge-success', label: 'Disponible', color: '#059669' },
+  EN_MISSION: { badge: 'badge-info', label: 'En mission', color: '#2563eb' }
 };
 
 export default function ConducteursPage({ userRole }) {
   const { keycloak } = useKeycloak();
-  const [conducteurs, setConducteurs]     = useState([]);
-  const [loading, setLoading]             = useState(true);
-  const [search, setSearch]               = useState('');
-  const [filterStatut, setFilterStatut]   = useState('');
-  const [errorVisible, setErrorVisible]   = useState('');
+  const [conducteurs, setConducteurs] = useState([]);
+  const [vehicules, setVehicules] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [filterStatut, setFilterStatut] = useState('');
+  const [errorVisible, setErrorVisible] = useState('');
 
   // Modales
-  const [showModal, setShowModal]             = useState(false);
+  const [showModal, setShowModal] = useState(false);
   const [showStatutModal, setShowStatutModal] = useState(false);
-  const [showDispoModal, setShowDispoModal]   = useState(false);
+  const [showDispoModal, setShowDispoModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
-  const [editItem, setEditItem]               = useState(null);
-  const [selectedC, setSelectedC]             = useState(null);
+  const [editItem, setEditItem] = useState(null);
+  const [selectedC, setSelectedC] = useState(null);
 
   const [form, setForm] = useState({
     nom: '', prenom: '', email: '', telephone: '',
@@ -41,7 +38,7 @@ export default function ConducteursPage({ userRole }) {
     dateExpirationPermis: ''
   });
   const [statutForm, setStatutForm] = useState('');
-  const [dispoForm, setDispoForm]   = useState('');
+  const [dispoForm, setDispoForm] = useState('');
 
   const isAdmin = keycloak.hasRealmRole('admin');
   const headers = () => ({
@@ -56,31 +53,40 @@ export default function ConducteursPage({ userRole }) {
         headers: headers(),
         body: JSON.stringify({
           query: `
-            query($statutCompte: StatutCompte, $disponibilite: DisponibiliteConducteur) {
-              conducteurs(statutCompte: $statutCompte, disponibilite: $disponibilite) {
+            query {
+              conducteurs {
                 id prenom nom email telephone numeroPermis dateExpirationPermis
-                statutCompte disponibilite vehiculeAssigneId keycloakId dateCreation
+                statutCompte disponibilite vehiculeAssigneId
               }
             }
-          `,
-          variables: {
-            statutCompte: filterStatut || null,
-            disponibilite: null
-          }
+          `
         })
       });
+
+      if (!res.ok) {
+        throw new Error(`Erreur de chargement (${res.status})`);
+      }
+
       const json = await res.json();
+      console.log('[ConducteursPage] GraphQL response:', json);
+      if (json.errors) throw new Error(json.errors[0].message);
+
       if (json.data && json.data.conducteurs) {
         setConducteurs(json.data.conducteurs);
       }
     } catch (err) {
-      console.error('Fetch error:', err);
+      console.error('[ConducteursPage] Fetch error:', err);
+      toast.error(err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { fetchData(); }, [keycloak.token]);
+  useEffect(() => {
+    if (keycloak && keycloak.authenticated) {
+      fetchData();
+    }
+  }, [keycloak, keycloak?.authenticated, filterStatut]);
 
   // POST ou PUT
   const handleSubmit = async (e) => {
@@ -108,24 +114,31 @@ export default function ConducteursPage({ userRole }) {
       `;
 
       const variables = editItem ? { id: editItem.id, ...form } : { ...form };
-      
+
       const res = await fetch(GRAPHQL_URL, {
         method: 'POST',
         headers: headers(),
         body: JSON.stringify({ query, variables })
       });
-      
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.errors?.[0]?.message || `Erreur serveur (${res.status})`);
+      }
+
       const json = await res.json();
       if (json.errors) {
         throw new Error(json.errors[0].message || 'Erreur lors de la sauvegarde');
       }
-      
+
       setShowModal(false);
       setEditItem(null);
       resetForm();
       fetchData();
+      toast.success(editItem ? 'Profil mis à jour !' : 'Conducteur créé !');
     } catch (err) {
       setErrorVisible(err.message);
+      toast.error(err.message);
     }
   };
 
@@ -152,7 +165,11 @@ export default function ConducteursPage({ userRole }) {
       if (json.errors) throw new Error(json.errors[0].message || 'Transition impossible');
       setShowStatutModal(false);
       fetchData();
-    } catch (err) { setErrorVisible(err.message); }
+      toast.success('Statut compte mis à jour');
+    } catch (err) {
+      setErrorVisible(err.message);
+      toast.error(err.message);
+    }
   };
 
   // PATCH /disponibilite — changer disponibilité
@@ -178,33 +195,76 @@ export default function ConducteursPage({ userRole }) {
       if (json.errors) throw new Error(json.errors[0].message || 'Erreur');
       setShowDispoModal(false);
       fetchData();
-    } catch (err) { setErrorVisible(err.message); }
+      toast.success('Disponibilité mise à jour');
+    } catch (err) {
+      setErrorVisible(err.message);
+      toast.error(err.message);
+    }
   };
 
   // DELETE — désactivation Admin
   const handleDesactiver = async (c) => {
     if (!isAdmin) return;
-    if (c.disponibilite === 'EN_MISSION') { alert('Impossible : conducteur EN_MISSION.'); return; }
-    if (!window.confirm(`Désactiver ${c.prenom} ${c.nom} ?`)) return;
-    try {
-      const res = await fetch(GRAPHQL_URL, {
-        method: 'POST',
-        headers: headers(),
-        body: JSON.stringify({
-          query: `
-            mutation($id: ID!) {
-              desactiverConducteur(id: $id) {
-                id
+    if (c.disponibilite === 'EN_MISSION') {
+      toast.error('Impossible : conducteur en mission.');
+      return;
+    }
+
+    toast((t) => (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+        <span style={{ fontWeight: 600, color: '#1e293b' }}>
+          Désactiver <strong>{c.prenom} {c.nom}</strong> ?
+        </span>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button
+            onClick={async () => {
+              toast.dismiss(t.id);
+              try {
+                const res = await fetch(GRAPHQL_URL, {
+                  method: 'POST',
+                  headers: headers(),
+                  body: JSON.stringify({
+                    query: `
+                      mutation($id: ID!) {
+                        desactiverConducteur(id: $id) { id }
+                      }
+                    `,
+                    variables: { id: c.id }
+                  })
+                });
+
+                if (!res.ok) {
+                    const errorData = await res.json().catch(() => ({}));
+                    throw new Error(errorData.errors?.[0]?.message || `Erreur serveur (${res.status})`);
+                }
+
+                const json = await res.json();
+                if (json.errors) throw new Error(json.errors[0].message);
+                fetchData();
+                toast.success('Conducteur désactivé', { icon: '👤' });
+              } catch (err) {
+                toast.error(err.message);
               }
-            }
-          `,
-          variables: { id: c.id }
-        })
-      });
-      const json = await res.json();
-      if (json.errors) throw new Error(json.errors[0].message || 'Erreur');
-      fetchData();
-    } catch (err) { alert(err.message); }
+            }}
+            className="btn btn-danger btn-sm"
+            style={{ padding: '0.4rem 1rem', fontSize: '0.8rem', borderRadius: '8px' }}
+          >
+            Confirmer
+          </button>
+          <button
+            onClick={() => toast.dismiss(t.id)}
+            className="btn btn-secondary btn-sm"
+            style={{ padding: '0.4rem 1rem', fontSize: '0.8rem', borderRadius: '8px', background: '#f1f5f9', color: '#64748b', border: '1px solid #e2e8f0' }}
+          >
+            Annuler
+          </button>
+        </div>
+      </div>
+    ), {
+      duration: 5000,
+      position: 'top-center',
+      style: { border: '1px solid #e2e8f0', padding: '1rem', borderRadius: '12px', background: 'white', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }
+    });
   };
 
   const resetForm = () => setForm({
@@ -228,7 +288,7 @@ export default function ConducteursPage({ userRole }) {
 
   const isPermisExpirant = (date) => {
     if (!date) return false;
-    const exp   = new Date(date);
+    const exp = new Date(date);
     const limit = new Date();
     limit.setDate(limit.getDate() + 30);
     return exp < limit;
@@ -305,9 +365,9 @@ export default function ConducteursPage({ userRole }) {
                   <tr><td colSpan="7" style={{ textAlign: 'center', padding: '2.5rem', color: '#94a3b8' }}>Aucun conducteur trouvé.</td></tr>
                 ) : filtered.map(c => {
                   const statutMeta = STATUT_COMPTE_META[c.statutCompte] || STATUT_COMPTE_META.INACTIF;
-                  const dispoMeta  = DISPO_META[c.disponibilite] || DISPO_META.DISPONIBLE;
+                  const dispoMeta = DISPO_META[c.disponibilite] || DISPO_META.DISPONIBLE;
                   const permisWarn = isPermisExpirant(c.dateExpirationPermis);
-                  const permisExp  = isPermisExpire(c.dateExpirationPermis);
+                  const permisExp = isPermisExpire(c.dateExpirationPermis);
 
                   return (
                     <tr key={c.id} style={{ opacity: c.statutCompte === 'INACTIF' ? 0.6 : 1 }}>

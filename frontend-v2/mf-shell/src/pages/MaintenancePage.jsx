@@ -5,10 +5,9 @@ import {
   User, CheckCircle, AlertCircle, Clock, Car, Filter, Search,
   PlayCircle, XCircle, CheckSquare, CalendarClock, History, ChevronRight
 } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 
-const API_MAINTENANCE = 'http://localhost:8083/api/v1/maintenances';
-const API_TECHNICIENS  = 'http://localhost:8083/api/v1/techniciens';
-const API_VEHICULES    = 'http://localhost:8081/vehicules';
+const GRAPHQL_URL = 'http://localhost:4000/graphql';
 
 const ModalWrapper = ({ show, onClose, title, icon: Icon, children, error }) => {
   if (!show) return null;
@@ -71,18 +70,30 @@ export default function MaintenancePage({ userRole }) {
 
   const fetchData = async () => {
     setLoading(true);
-    const h = { 'Authorization': `Bearer ${keycloak.token}` };
     try {
-      let url = API_MAINTENANCE;
-      if (filterStatut) url += `?statut=${filterStatut}`;
-      const [mRes, vRes, tRes] = await Promise.allSettled([
-        fetch(url, { headers: h }),
-        fetch(API_VEHICULES, { headers: h }),
-        fetch(API_TECHNICIENS, { headers: h })
-      ]);
-      if (mRes.status === 'fulfilled' && mRes.value.ok) setMaintenances(await mRes.value.json());
-      if (vRes.status === 'fulfilled' && vRes.value.ok) setVehicules(await vRes.value.json());
-      if (tRes.status === 'fulfilled' && tRes.value.ok) setTechniciens(await tRes.value.json());
+      const query = `
+        query($statut: StatutMaintenance) {
+          maintenances(statut: $statut) {
+            id vehiculeId technicienId typeIntervention description statut dateCreation datePlanifiee cout compteRendu
+          }
+          vehicules { id plaque marque modele }
+          techniciens { id nom prenom disponibilite }
+        }
+      `;
+      const res = await fetch(GRAPHQL_URL, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({
+          query,
+          variables: { statut: filterStatut || null }
+        })
+      });
+      const json = await res.json();
+      if (json.data) {
+        if (json.data.maintenances) setMaintenances(json.data.maintenances);
+        if (json.data.vehicules) setVehicules(json.data.vehicules);
+        if (json.data.techniciens) setTechniciens(json.data.techniciens);
+      }
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
   };
@@ -108,15 +119,33 @@ export default function MaintenancePage({ userRole }) {
     e.preventDefault();
     setError('');
     try {
-      const res = await fetch(API_MAINTENANCE, {
-        method: 'POST', headers: headers(),
-        body: JSON.stringify(createForm)
+      const query = `
+        mutation($vId: ID!, $type: String!, $desc: String) {
+          signalerMaintenance(vehiculeId: $vId, typeIntervention: $type, description: $desc) { id }
+        }
+      `;
+      const res = await fetch(GRAPHQL_URL, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({
+          query,
+          variables: {
+            vId: createForm.vehiculeId,
+            type: createForm.typeIntervention,
+            desc: createForm.description
+          }
+        })
       });
-      if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.message || 'Erreur création'); }
+      const json = await res.json();
+      if (json.errors) throw new Error(json.errors[0].message);
       setShowCreate(false);
       setCreateForm({ vehiculeId: '', typeIntervention: 'REVISION', description: '' });
       fetchData();
-    } catch (err) { setError(err.message); }
+      toast.success('Maintenance signalée !');
+    } catch (err) { 
+      setError(err.message); 
+      toast.error(err.message);
+    }
   };
 
   // ---- PLANIFIER (PATCH /planifier) ----
@@ -125,34 +154,53 @@ export default function MaintenancePage({ userRole }) {
     setError('');
     if (!planifierForm.technicienId) { setError('Un technicien est requis.'); return; }
     try {
-      const res = await fetch(`${API_MAINTENANCE}/${selectedItem.id}/planifier`, {
-        method: 'PUT', headers: headers(),
+      const query = `
+        mutation($id: ID!, $date: String!, $tId: ID!) {
+          planifierMaintenance(id: $id, datePlanifiee: $date, technicienId: $tId) { id }
+        }
+      `;
+      const res = await fetch(GRAPHQL_URL, {
+        method: 'POST',
+        headers: headers(),
         body: JSON.stringify({
-          ...planifierForm,
-          datePlanifiee: `${planifierForm.datePlanifiee}T00:00:00`
+          query,
+          variables: {
+            id: selectedItem.id,
+            date: `${planifierForm.datePlanifiee}T00:00:00`,
+            tId: planifierForm.technicienId
+          }
         })
       });
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}));
-        console.error("Détails erreur planification:", j);
-        throw new Error(j.message || 'Erreur planification');
-      }
+      const json = await res.json();
+      if (json.errors) throw new Error(json.errors[0].message);
       setShowPlanifier(false);
       fetchData();
-    } catch (err) { setError(err.message); }
+      toast.success('Maintenance planifiée !');
+    } catch (err) { 
+      setError(err.message); 
+      toast.error(err.message);
+    }
   };
 
   // ---- DÉMARRER (PATCH /demarrer) ----
   const handleDemarrer = async () => {
     setError('');
     try {
-      const res = await fetch(`${API_MAINTENANCE}/${selectedItem.id}/demarrer`, {
-        method: 'PUT', headers: headers(), body: JSON.stringify({})
+      const query = `mutation($id: ID!) { demarrerMaintenance(id: $id) { id } }`;
+      const res = await fetch(GRAPHQL_URL, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({ query, variables: { id: selectedItem.id } })
       });
-      if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.message || 'Erreur démarrage'); }
+      const json = await res.json();
+      if (json.errors) throw new Error(json.errors[0].message);
       setShowDemarrer(false);
       fetchData();
-    } catch (err) { setError(err.message); }
+      toast.success('Travaux démarrés !');
+    } catch (err) { 
+      setError(err.message); 
+      toast.error(err.message);
+    }
   };
 
   // ---- CLÔTURER (PATCH /cloturer) ----
@@ -162,15 +210,33 @@ export default function MaintenancePage({ userRole }) {
     if (!cloturerForm.compteRendu?.trim()) { setError('Le compte-rendu est obligatoire.'); return; }
     if (cloturerForm.cout < 0) { setError('Le coût doit être >= 0.'); return; }
     try {
-      const res = await fetch(`${API_MAINTENANCE}/${selectedItem.id}/cloturer`, {
-        method: 'PUT', headers: headers(),
-        body: JSON.stringify(cloturerForm)
+      const query = `
+        mutation($id: ID!, $cr: String, $cout: Float) {
+          cloturerMaintenance(id: $id, compteRendu: $cr, cout: $cout) { id }
+        }
+      `;
+      const res = await fetch(GRAPHQL_URL, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({
+          query,
+          variables: {
+            id: selectedItem.id,
+            cr: cloturerForm.compteRendu,
+            cout: parseFloat(cloturerForm.cout)
+          }
+        })
       });
-      if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.message || 'Erreur clôture'); }
+      const json = await res.json();
+      if (json.errors) throw new Error(json.errors[0].message);
       setShowCloturer(false);
       setCloturerForm({ compteRendu: '', cout: 0 });
       fetchData();
-    } catch (err) { setError(err.message); }
+      toast.success('Maintenance clôturée !');
+    } catch (err) { 
+      setError(err.message); 
+      toast.error(err.message);
+    }
   };
 
   // ---- ANNULER (PATCH /annuler) ----
@@ -178,15 +244,25 @@ export default function MaintenancePage({ userRole }) {
     e.preventDefault();
     setError('');
     try {
-      const res = await fetch(`${API_MAINTENANCE}/${selectedItem.id}/annuler`, {
-        method: 'PUT', headers: headers(),
-        body: JSON.stringify({ motif: annulerForm.motif })
+      const query = `mutation($id: ID!, $motif: String) { annulerMaintenance(id: $id, motif: $motif) { id } }`;
+      const res = await fetch(GRAPHQL_URL, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({
+          query,
+          variables: { id: selectedItem.id, motif: annulerForm.motif }
+        })
       });
-      if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.message || 'Erreur annulation'); }
+      const json = await res.json();
+      if (json.errors) throw new Error(json.errors[0].message);
       setShowAnnuler(false);
       setAnnulerForm({ motif: '' });
       fetchData();
-    } catch (err) { setError(err.message); }
+      toast.success('Maintenance annulée');
+    } catch (err) { 
+      setError(err.message); 
+      toast.error(err.message);
+    }
   };
 
   // ---- HISTORIQUE véhicule ----
@@ -194,10 +270,14 @@ export default function MaintenancePage({ userRole }) {
     if (!historiqueVehiculeId) return;
     setError('');
     try {
-      const res = await fetch(`${API_MAINTENANCE}/vehicule/${historiqueVehiculeId}`, {
-        headers: { 'Authorization': `Bearer ${keycloak.token}` }
+      const query = `query($vId: ID!) { historiqueMaintenance(vehiculeId: $vId) { id typeIntervention description statut dateCreation cout compteRendu } }`;
+      const res = await fetch(GRAPHQL_URL, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({ query, variables: { vId: historiqueVehiculeId } })
       });
-      if (res.ok) setHistorique(await res.json());
+      const json = await res.json();
+      if (json.data) setHistorique(json.data.historiqueMaintenance || []);
       else setHistorique([]);
     } catch (err) { setHistorique([]); }
   };
@@ -483,6 +563,7 @@ export default function MaintenancePage({ userRole }) {
           </div>
         </form>
       </ModalWrapper>
+
 
       {/* ---- MODALE HISTORIQUE ---- */}
       {showHistorique && (

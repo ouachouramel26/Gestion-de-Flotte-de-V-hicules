@@ -5,13 +5,16 @@ import fr.sgfv.conducteurs.dto.ConducteurDto;
 import fr.sgfv.conducteurs.kafka.ConducteurKafkaProducer;
 import fr.sgfv.conducteurs.repository.ConducteurRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.UUID;
+import java.time.LocalDate;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ConducteurService {
@@ -48,7 +51,6 @@ public class ConducteurService {
             throw new RuntimeException("Un conducteur avec ce permis existe déjà");
         }
 
-        // 1. Création automatique du compte dans Keycloak
         String realKeycloakId;
         try {
             realKeycloakId = keycloakService.createKeycloakUser(
@@ -61,7 +63,6 @@ public class ConducteurService {
             throw new RuntimeException("Erreur Keycloak : " + e.getMessage());
         }
 
-        // 2. Enregistrement en base de données avec le vrai keycloakId
         Conducteur conducteur = Conducteur.builder()
                 .keycloakId(realKeycloakId)
                 .nom(dto.getNom())
@@ -69,15 +70,13 @@ public class ConducteurService {
                 .email(dto.getEmail())
                 .telephone(dto.getTelephone())
                 .numeroPermis(dto.getNumeroPermis())
-                .dateExpirationPermis(dto.getDateExpirationPermis())
-                .statutCompte(dto.getStatutCompte() != null ? dto.getStatutCompte() : fr.sgfv.conducteurs.entity.ConducteurStatut.ACTIF)
+                .dateExpirationPermis(parseDate(dto.getDateExpirationPermis()))
+                .statutCompte(dto.getStatutCompte() != null ? fr.sgfv.conducteurs.entity.ConducteurStatut.valueOf(dto.getStatutCompte()) : fr.sgfv.conducteurs.entity.ConducteurStatut.ACTIF)
                 .disponibilite(fr.sgfv.conducteurs.entity.Disponibilite.DISPONIBLE)
                 .build();
 
         Conducteur savedConducteur = conducteurRepository.save(conducteur);
-        
         kafkaPublisher.publishConducteurCreated(savedConducteur.getId(), savedConducteur.getKeycloakId());
-        
         return mapToDto(savedConducteur);
     }
 
@@ -91,11 +90,27 @@ public class ConducteurService {
         if (dto.getEmail() != null) conducteur.setEmail(dto.getEmail());
         if (dto.getTelephone() != null) conducteur.setTelephone(dto.getTelephone());
         if (dto.getNumeroPermis() != null) conducteur.setNumeroPermis(dto.getNumeroPermis());
-        if (dto.getDateExpirationPermis() != null) conducteur.setDateExpirationPermis(dto.getDateExpirationPermis());
+        if (dto.getDateExpirationPermis() != null && !dto.getDateExpirationPermis().isEmpty()) {
+            try {
+                conducteur.setDateExpirationPermis(LocalDate.parse(dto.getDateExpirationPermis()));
+            } catch (Exception e) {
+                log.warn("Format de date invalide pour conducteur {} : {}", id, dto.getDateExpirationPermis());
+            }
+        }
 
         Conducteur saved = conducteurRepository.save(conducteur);
-        // kafkaPublisher.publishConducteurUpdated(saved.getId()); 
         return mapToDto(saved);
+    }
+
+    private LocalDate parseDate(String dateStr) {
+        if (dateStr == null || dateStr.isEmpty()) {
+            return LocalDate.now().plusYears(1); // Valeur par défaut si vide
+        }
+        try {
+            return LocalDate.parse(dateStr);
+        } catch (Exception e) {
+            return LocalDate.now().plusYears(1);
+        }
     }
 
     @Transactional
@@ -105,7 +120,6 @@ public class ConducteurService {
 
         conducteur.setStatutCompte(statut);
         Conducteur saved = conducteurRepository.save(conducteur);
-        // kafkaPublisher.publishConducteurStatusChanged(saved.getId(), statut.name());
         return mapToDto(saved);
     }
 
@@ -116,7 +130,6 @@ public class ConducteurService {
 
         conducteur.setDisponibilite(disponibilite);
         Conducteur saved = conducteurRepository.save(conducteur);
-        // kafkaPublisher.publishConducteurAvailabilityChanged(saved.getId(), disponibilite.name());
         return mapToDto(saved);
     }
 
@@ -127,23 +140,23 @@ public class ConducteurService {
 
         conducteur.setStatutCompte(fr.sgfv.conducteurs.entity.ConducteurStatut.SUSPENDU);
         Conducteur saved = conducteurRepository.save(conducteur);
-        // kafkaPublisher.publishConducteurDeactivated(saved.getId());
         return mapToDto(saved);
     }
 
     private ConducteurDto mapToDto(Conducteur conducteur) {
         return ConducteurDto.builder()
-                .id(conducteur.getId())
+                .id(conducteur.getId().toString())
                 .keycloakId(conducteur.getKeycloakId())
                 .nom(conducteur.getNom())
                 .prenom(conducteur.getPrenom())
                 .email(conducteur.getEmail())
                 .telephone(conducteur.getTelephone())
                 .numeroPermis(conducteur.getNumeroPermis())
-                .dateExpirationPermis(conducteur.getDateExpirationPermis())
-                .vehiculeAssigneId(conducteur.getVehiculeAssigneId())
-                .statutCompte(conducteur.getStatutCompte())
-                .disponibilite(conducteur.getDisponibilite())
+                .dateExpirationPermis(conducteur.getDateExpirationPermis().toString())
+                .vehiculeAssigneId(conducteur.getVehiculeAssigneId() != null ? conducteur.getVehiculeAssigneId().toString() : null)
+                .statutCompte(conducteur.getStatutCompte().name())
+                .disponibilite(conducteur.getDisponibilite().name())
+                .dateCreation(conducteur.getDateCreation() != null ? conducteur.getDateCreation().toString() : null)
                 .build();
     }
 }

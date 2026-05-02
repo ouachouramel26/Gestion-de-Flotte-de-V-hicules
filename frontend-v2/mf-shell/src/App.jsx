@@ -231,10 +231,13 @@ function MainLayout() {
   );
 }
 
+import { Toaster } from 'react-hot-toast';
+
 function App() {
   return (
     <ReactKeycloakProvider authClient={keycloak} initOptions={{ onLoad: 'login-required', checkLoginIframe: false }}>
       <MainLayout />
+      <Toaster position="top-right" reverseOrder={false} />
     </ReactKeycloakProvider>
   );
 }

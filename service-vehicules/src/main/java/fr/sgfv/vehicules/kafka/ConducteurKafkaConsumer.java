@@ -24,26 +24,26 @@ public class ConducteurKafkaConsumer {
     )
     @Transactional
     public void consommer(Map<String, Object> message) {
-        String event = (String) message.get("event");
-        if (event == null) {
-            log.warn("[Kafka] Message sans champ 'event' — ignoré");
+        String eventType = (String) message.get("eventType");
+        if (eventType == null) {
+            log.warn("[Kafka] Message sans champ 'eventType' — ignoré");
             return;
         }
 
-        log.info("[Kafka] Événement reçu : {}", event);
+        log.info("[Kafka] Événement reçu : {}", eventType);
 
-        switch (event) {
-            case "conducteur.assigned"    -> traiterAssigned(message);
-            case "conducteur.unassigned"  -> traiterUnassigned(message);
-            case "conducteur.deactivated" -> traiterDeactivated(message);
-            default -> log.debug("[Kafka] {} ignoré par service-vehicules", event);
+        switch (eventType) {
+            case "CONDUCTEUR_ASSIGNED"    -> traiterAssigned(message);
+            case "CONDUCTEUR_UNASSIGNED"  -> traiterUnassigned(message);
+            case "CONDUCTEUR_DEACTIVATED" -> traiterDeactivated(message);
+            default -> log.debug("[Kafka] {} ignoré par service-vehicules", eventType);
         }
     }
 
     private void traiterAssigned(Map<String, Object> message) {
         try {
-            UUID vehiculeId   = UUID.fromString((String) message.get("vehicule_id"));
-            UUID conducteurId = UUID.fromString((String) message.get("conducteur_id"));
+            UUID vehiculeId   = UUID.fromString((String) message.get("vehiculeId"));
+            UUID conducteurId = UUID.fromString((String) message.get("conducteurId"));
 
             vehiculeRepository.findById(vehiculeId).ifPresentOrElse(
                 v -> {
@@ -62,7 +62,7 @@ public class ConducteurKafkaConsumer {
 
     private void traiterUnassigned(Map<String, Object> message) {
         try {
-            UUID vehiculeId = UUID.fromString((String) message.get("vehicule_id"));
+            UUID vehiculeId = UUID.fromString((String) message.get("vehiculeId"));
 
             vehiculeRepository.findById(vehiculeId).ifPresentOrElse(
                 v -> {

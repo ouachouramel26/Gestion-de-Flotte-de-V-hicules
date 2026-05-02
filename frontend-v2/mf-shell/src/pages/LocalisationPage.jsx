@@ -3,7 +3,7 @@ import { useKeycloak } from '@react-keycloak/web';
 import {
   MapPin, Navigation, Car, Loader, Box, Plus, Trash2, History,
   Calendar, X, AlertCircle, RefreshCw, Layers, Map as MapIcon,
-  ChevronRight, Info, Zap, ArrowUpRight
+  ChevronRight, Info, Zap, ArrowUpRight, User
 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMapEvents, Polyline, ZoomControl } from 'react-leaflet';
 import L from 'leaflet';
@@ -15,8 +15,7 @@ import iconShadow from 'leaflet/dist/images/marker-shadow.png';
 let DefaultIcon = L.icon({ iconUrl, shadowUrl: iconShadow, iconSize: [25, 41], iconAnchor: [12, 41] });
 L.Marker.prototype.options.icon = DefaultIcon;
 
-const LOCALISATION_API = 'http://localhost:8084/api/v1';
-const VEHICULES_API     = 'http://localhost:8081/vehicules';
+const GRAPHQL_URL = 'http://localhost:4000/graphql';
 
 // Plus besoin de RemoteMap, on utilise Leaflet localement
 
@@ -39,88 +38,88 @@ export default function LocalisationPage() {
   const [zones, setZones] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorHeader, setErrorHeader] = useState('');
-  
+
   // Zones
   const [showZoneModal, setShowZoneModal] = useState(false);
   const [isAddingZone, setIsAddingZone] = useState(false);
   const [newZone, setNewZone] = useState({ nom: '', rayonMetres: 500, type: 'AUTORISEE', latitudeCentre: 0, longitudeCentre: 0 });
-  
+
   // Historique / Trajet
   const [historyMode, setHistoryMode] = useState(false);
   const [historyFilters, setHistoryFilters] = useState({ vehiculeId: '', debut: '', fin: '' });
-  const [trajet, setTrajet] = useState([]); 
+  const [trajet, setTrajet] = useState([]);
   const [loadingTrajet, setLoadingTrajet] = useState(false);
 
-  const [activeTab, setActiveTab] = useState('vehicules'); 
+  const [activeTab, setActiveTab] = useState('vehicules');
   const mapRef = useRef();
 
   const isAdmin = keycloak.hasRealmRole('admin');
 
   const fetchData = useCallback(async () => {
-    const headers = { 'Authorization': `Bearer ${keycloak.token}` };
     try {
-      const [vRes, zRes] = await Promise.all([
-        fetch(VEHICULES_API, { headers }),
-        fetch(`${LOCALISATION_API}/zones`, { headers })
-      ]);
-
-      let vData = [];
-      if (vRes.ok) {
-        vData = await vRes.json();
-        setVehicules(vData);
-      }
-      if (zRes.ok) setZones(await zRes.json());
-
-      const locRes = await fetch(`${LOCALISATION_API}/vehicules`, { headers }).catch(() => null);
-      let locData = [];
-      if (locRes && locRes.ok) {
-        locData = await locRes.json();
-      } else {
-        locData = vData.filter(v => v.statut === 'EN_MISSION').map(v => ({
-          id: v.id, immatriculation: v.plaque, marque: v.marque, modele: v.modele,
-          latitude: 48.8566 + (Math.random() - 0.5) * 0.1,
-          longitude: 2.3522 + (Math.random() - 0.5) * 0.1,
-          vitesse: Math.floor(Math.random() * 90),
-          direction: Math.floor(Math.random() * 360)
-        }));
-      }
-
-      // Si conducteur : ne montrer que son véhicule assigné
-      if (!isAdmin) {
-        // Récupérer l'ID interne du conducteur connecté via GraphQL
-        const profilRes = await fetch('http://localhost:4000/graphql', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${keycloak.token}` },
-          body: JSON.stringify({ query: '{ monProfil { id } }' })
-        }).catch(() => null);
-
-        let monId = null;
-        if (profilRes && profilRes.ok) {
-          const profilData = await profilRes.json();
-          monId = profilData?.data?.monProfil?.id;
+      const query = `
+        query {
+          vehicules { id plaque marque modele statut conducteurAssigneId conducteurAssigne { nom prenom } }
+          zones { id nom type latitudeCentre longitudeCentre rayonMetres }
+          positionsActuelles { vehiculeId latitude longitude vitesse direction }
+          monProfil { id }
         }
-
-        if (monId) {
-          locData = locData.filter(p => {
-            const veh = vData.find(v => v.id === p.id);
-            return veh && veh.conducteurAssigneId === monId;
-          });
-        } else {
-          locData = [];
-        }
-      }
-
-      setPositions(locData);
-
-      // Envoyer les positions au service-localisation pour déclencher le géofencing
-      locData.forEach(p => {
-        fetch(`${LOCALISATION_API}/positions`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${keycloak.token}` },
-          body: JSON.stringify({ vehiculeId: p.id, latitude: p.latitude, longitude: p.longitude, vitesse: p.vitesse || 0, direction: p.direction || 0 })
-        }).catch(() => null);
+      `;
+      const res = await fetch(GRAPHQL_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${keycloak.token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ query })
       });
+      const json = await res.json();
+      console.log("[LocalisationPage] GraphQL response:", json);
+      if (json.data) {
+        const vData = json.data.vehicules || [];
+        setVehicules(vData);
+        setZones(json.data.zones || []);
 
+        let locData = json.data.positionsActuelles || [];
+
+        // Fusionner avec les infos véhicules
+        let mergedPositions = locData.map(pos => {
+          const v = vData.find(x => x.id === pos.vehiculeId);
+          return {
+            ...pos,
+            id: pos.vehiculeId, // Utiliser vehiculeId comme ID pour les markers
+            immatriculation: v?.plaque || 'Inconnu',
+            marque: v?.marque || '',
+            modele: v?.modele || '',
+            conducteur: v?.conducteurAssigne ? `${v.conducteurAssigne.nom} ${v.conducteurAssigne.prenom}` : 'Non assigné'
+          };
+        });
+
+        // Si conducteur : ne montrer que son véhicule
+        if (!isAdmin) {
+          const monId = json.data.monProfil?.id;
+          if (monId) {
+            mergedPositions = mergedPositions.filter(p => {
+              const veh = vData.find(v => v.id === p.vehiculeId);
+              return veh && veh.conducteurAssigneId === monId;
+            });
+          }
+        }
+
+        // Fallback temporaire : on affiche tout pour voir si la data arrive
+        if (mergedPositions.length === 0) {
+          console.log("[LocalisationPage] No live positions, using all vehicles as fallback for debug");
+          const fallbacks = vData.map(v => ({
+            id: v.id, vehiculeId: v.id, immatriculation: v.plaque, marque: v.marque, modele: v.modele,
+            latitude: 48.8566 + (Math.random() - 0.5) * 0.05,
+            longitude: 2.3522 + (Math.random() - 0.5) * 0.05,
+            vitesse: 0, direction: 0
+          }));
+          setPositions(fallbacks);
+        } else {
+          setPositions(mergedPositions);
+        }
+      }
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
   }, [keycloak.token, isAdmin]);
@@ -136,20 +135,37 @@ export default function LocalisationPage() {
     setLoadingTrajet(true);
     setErrorHeader('');
     try {
-      let url = `${LOCALISATION_API}/positions/vehicule/${historyFilters.vehiculeId}`;
-      if (historyFilters.debut && historyFilters.fin) {
-        url += `?debut=${historyFilters.debut}&fin=${historyFilters.fin}`;
-      }
-      const res = await fetch(url, { headers: { 'Authorization': `Bearer ${keycloak.token}` } });
-      if (res.ok) {
-        const data = await res.json();
-        const coords = data.map(p => [p.latitude, p.longitude]);
+      const query = `
+        query($id: ID!, $d: String, $f: String) {
+          trajetVehicule(vehiculeId: $id, debut: $d, fin: $f) {
+            latitude longitude vitesse horodatage
+          }
+        }
+      `;
+      const res = await fetch(GRAPHQL_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${keycloak.token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          query,
+          variables: {
+            id: historyFilters.vehiculeId,
+            d: historyFilters.debut || null,
+            f: historyFilters.fin || null
+          }
+        })
+      });
+      const json = await res.json();
+      if (json.data && json.data.trajetVehicule) {
+        const coords = json.data.trajetVehicule.map(p => [p.latitude, p.longitude]);
         setTrajet(coords);
       } else {
         setTrajet([]);
         setErrorHeader("Aucun trajet trouvé.");
       }
-    } catch (err) { 
+    } catch (err) {
       setErrorHeader("Erreur récupération trajet.");
       setTrajet([]);
     } finally {
@@ -161,18 +177,35 @@ export default function LocalisationPage() {
     e.preventDefault();
     setErrorHeader('');
     try {
-      const res = await fetch(`${LOCALISATION_API}/zones`, {
+      const query = `
+        mutation($n: String!, $t: TypeZone!, $lat: Float!, $lon: Float!, $r: Int!) {
+          creerZone(nom: $n, type: $t, latitudeCentre: $lat, longitudeCentre: $lon, rayonMetres: $r) { id }
+        }
+      `;
+      const res = await fetch(GRAPHQL_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${keycloak.token}` },
-        body: JSON.stringify(newZone)
+        headers: {
+          'Authorization': `Bearer ${keycloak.token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          query,
+          variables: {
+            n: newZone.nom,
+            t: newZone.type,
+            lat: parseFloat(newZone.latitudeCentre),
+            lon: parseFloat(newZone.longitudeCentre),
+            r: parseInt(newZone.rayonMetres)
+          }
+        })
       });
-      if (res.ok) {
+      const json = await res.json();
+      if (json.data) {
         setShowZoneModal(false);
         fetchData();
         setActiveTab('zones');
-      } else {
-        const j = await res.json();
-        setErrorHeader(j.error || "Erreur création zone");
+      } else if (json.errors) {
+        setErrorHeader(json.errors[0].message);
       }
     } catch (err) { setErrorHeader(err.message); }
   };
@@ -180,9 +213,16 @@ export default function LocalisationPage() {
   const deleteZone = async (id) => {
     if (!window.confirm('Supprimer cette zone ?')) return;
     try {
-      await fetch(`${LOCALISATION_API}/zones/${id}`, { 
-        method: 'DELETE', 
-        headers: { 'Authorization': `Bearer ${keycloak.token}` } 
+      await fetch(GRAPHQL_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${keycloak.token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          query: `mutation($id: ID!) { supprimerZone(id: $id) }`,
+          variables: { id }
+        })
       });
       fetchData();
     } catch (err) { console.error(err); }
@@ -208,7 +248,7 @@ export default function LocalisationPage() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: '1rem', flex: 1, minHeight: 0 }}>
-        
+
         {/* Panel GAUCHE */}
         <div className="card" style={{ padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <div style={{ display: 'flex', borderBottom: '1px solid #f1f5f9' }}>
@@ -253,14 +293,14 @@ export default function LocalisationPage() {
           {historyMode && (
             <div className="card" style={{ padding: '0.75rem', display: 'flex', gap: '0.75rem', alignItems: 'flex-end' }}>
               <div style={{ flex: 1 }} className="form-group">
-                <label style={{fontSize:'0.75rem'}}>Véhicule</label>
-                <select value={historyFilters.vehiculeId} style={{width:'100%', padding:'0.4rem'}} onChange={e => setHistoryFilters({...historyFilters, vehiculeId: e.target.value})}>
+                <label style={{ fontSize: '0.75rem' }}>Véhicule</label>
+                <select value={historyFilters.vehiculeId} style={{ width: '100%', padding: '0.4rem' }} onChange={e => setHistoryFilters({ ...historyFilters, vehiculeId: e.target.value })}>
                   <option value="">Choisir...</option>
                   {vehicules.map(v => <option key={v.id} value={v.id}>{v.plaque} ({v.marque})</option>)}
                 </select>
               </div>
-              <div style={{width:'140px'}} className="form-group"><label style={{fontSize:'0.75rem'}}>Début</label><input type="datetime-local" value={historyFilters.debut} style={{width:'100%', padding:'0.3rem'}} onChange={e => setHistoryFilters({...historyFilters, debut: e.target.value})} /></div>
-              <div style={{width:'140px'}} className="form-group"><label style={{fontSize:'0.75rem'}}>Fin</label><input type="datetime-local" value={historyFilters.fin} style={{width:'100%', padding:'0.3rem'}} onChange={e => setHistoryFilters({...historyFilters, fin: e.target.value})} /></div>
+              <div style={{ width: '140px' }} className="form-group"><label style={{ fontSize: '0.75rem' }}>Début</label><input type="datetime-local" value={historyFilters.debut} style={{ width: '100%', padding: '0.3rem' }} onChange={e => setHistoryFilters({ ...historyFilters, debut: e.target.value })} /></div>
+              <div style={{ width: '140px' }} className="form-group"><label style={{ fontSize: '0.75rem' }}>Fin</label><input type="datetime-local" value={historyFilters.fin} style={{ width: '100%', padding: '0.3rem' }} onChange={e => setHistoryFilters({ ...historyFilters, fin: e.target.value })} /></div>
               <button className="btn btn-primary btn-sm" onClick={fetchTrajet} disabled={loadingTrajet || !historyFilters.vehiculeId}>Tracer</button>
             </div>
           )}
@@ -279,13 +319,13 @@ export default function LocalisationPage() {
               />
 
               {/* Gestionnaire de clic pour ajouter une zone */}
-              <MapEventsHandler 
-                isAddingZone={isAddingZone} 
+              <MapEventsHandler
+                isAddingZone={isAddingZone}
                 onMapClick={(lat, lng) => {
                   setNewZone({ ...newZone, latitudeCentre: lat, longitudeCentre: lng });
                   setShowZoneModal(true);
                   setIsAddingZone(false);
-                }} 
+                }}
               />
 
               {positions.map(p => (
@@ -293,6 +333,9 @@ export default function LocalisationPage() {
                   <Popup>
                     <div style={{ fontWeight: 700 }}>{p.immatriculation}</div>
                     <div style={{ fontSize: '0.8rem' }}>{p.marque} {p.modele}</div>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#2563eb', marginTop: '4px' }}>
+                      <User size={12} style={{verticalAlign:'middle', marginRight:'2px'}}/> {p.conducteur}
+                    </div>
                     <div style={{ fontSize: '0.75rem', color: '#10b981' }}>Vitesse: {p.vitesse || 0} km/h</div>
                   </Popup>
                 </Marker>

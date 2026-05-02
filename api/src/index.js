@@ -91,6 +91,9 @@ const resolvers = {
           headers: { Authorization: authHeader }
         });
         console.log(`[Gateway] Found ${res.data?.length || 0} conducteurs`);
+        if (res.data && res.data.length > 0) {
+          console.log('[Gateway] Sample conducteur:', JSON.stringify(res.data[0]));
+        }
         return res.data;
       } catch (err) {
         console.error(`[Gateway] Error fetching conducteurs: ${err.message}`, err.response?.data || '');
@@ -204,19 +207,29 @@ const resolvers = {
 
     // Service Localisation
     trajetVehicule: async (_, { vehiculeId, debut, fin }, { token }) => {
-      const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
-      const res = await services.localisation.get(`/api/v1/positions/vehicule/${vehiculeId}`, {
-        params: { debut, fin },
-        headers: { Authorization: authHeader }
-      });
-      return res.data;
+      try {
+        const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+        const res = await services.localisation.get(`/api/v1/positions/vehicule/${vehiculeId}`, {
+          params: { debut, fin },
+          headers: { Authorization: authHeader }
+        });
+        return res.data || [];
+      } catch (err) {
+        console.error(`[Gateway] Error fetching trajet: ${err.message}`);
+        return [];
+      }
     },
     zones: async (_, __, { token }) => {
-      const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
-      const res = await services.localisation.get('/api/v1/zones', {
-        headers: { Authorization: authHeader }
-      });
-      return res.data;
+      try {
+        const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+        const res = await services.localisation.get('/api/v1/zones', {
+          headers: { Authorization: authHeader }
+        });
+        return res.data || [];
+      } catch (err) {
+        console.error(`[Gateway] Error fetching zones: ${err.message}`);
+        return [];
+      }
     },
     dernierePosition: async (_, { vehiculeId }, { token }) => {
       const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
@@ -226,20 +239,74 @@ const resolvers = {
       });
       return res.data.length > 0 ? res.data[0] : null;
     },
+    positionsActuelles: async (_, __, { token }) => {
+      try {
+        const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+        const res = await services.localisation.get('/api/v1/vehicules', {
+          headers: { Authorization: authHeader }
+        });
+        // Mapper "id" du microservice vers "vehiculeId" attendu par GraphQL
+        return (res.data || []).map(p => ({
+          ...p,
+          vehiculeId: p.id
+        }));
+      } catch (err) {
+        console.error(`[Gateway] Error fetching positionsActuelles: ${err.message}`);
+        return [];
+      }
+    },
+  },
+
+  Vehicule: {
+    conducteurAssigne: async (parent, _, { token }) => {
+      if (!parent.conducteurAssigneId) return null;
+      try {
+        const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+        const res = await services.conducteurs.get(`/api/v1/conducteurs/${parent.conducteurAssigneId}`, {
+          headers: { Authorization: authHeader }
+        });
+        return res.data;
+      } catch (err) {
+        console.error(`[Gateway] Error fetching conducteurAssigne for vehicle ${parent.id}: ${err.message}`);
+        return null;
+      }
+    }
   },
 
   Mutation: {
     // Service Véhicules
     creerVehicule: async (_, args, { token }) => {
-      const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
-      const res = await services.vehicules.post('/vehicules', args, {
-        headers: { Authorization: authHeader }
-      });
-      return res.data;
+      try {
+        const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+        const res = await services.vehicules.post('/vehicules', args, {
+          headers: { Authorization: authHeader }
+        });
+        return res.data;
+      } catch (err) {
+        console.error(`[Gateway] Erreur creerVehicule: ${err.message}`, err.response?.data || '');
+        throw new Error(err.response?.data?.message || err.message);
+      }
+    },
+    modifierVehicule: async (_, args, { token }) => {
+      const { id, ...updateData } = args;
+      try {
+        const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+        console.log(`[Gateway] Modification véhicule ${id} avec:`, updateData);
+        const res = await services.vehicules.put(`/vehicules/${id}`, updateData, {
+          headers: { Authorization: authHeader }
+        });
+        return res.data || { id, ...updateData };
+      } catch (err) {
+        const errorMsg = err.response?.data?.message || err.message;
+        console.error(`[Gateway] Erreur modifierVehicule (ID: ${id}): ${errorMsg}`);
+        if (err.response) {
+            console.error(`[Gateway] Détails erreur:`, JSON.stringify(err.response.data));
+        }
+        throw new Error(errorMsg);
+      }
     },
     changerStatutVehicule: async (_, { id, statut }, { token }) => {
       try {
-        // Utilise un jeton administrateur pour contourner le 403 Forbidden du microservice
         const adminToken = await getAdminToken();
         const res = await services.vehicules.patch(`/vehicules/${id}/statut`, { statut }, {
           headers: { Authorization: `Bearer ${adminToken}` }
@@ -251,35 +318,75 @@ const resolvers = {
       }
     },
     assignerConducteur: async (_, { vehiculeId, conducteurId }, { token }) => {
-      const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
-      await services.conducteurs.post('/api/v1/assignations', { vehiculeId, conducteurId }, {
-        headers: { Authorization: authHeader }
-      });
-      // On renvoie un objet partiel pour satisfaire la contrainte non-nullable (!) du schéma
-      return { id: vehiculeId };
+      try {
+        const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+        
+        // 1. Appeler le service Conducteurs pour créer l'assignation officielle
+        await services.conducteurs.post('/api/v1/assignations', { vehiculeId, conducteurId }, {
+          headers: { Authorization: authHeader }
+        });
+
+        // 2. Appeler le service Véhicules pour mettre à jour l'ID conducteur immédiatement (Double-écriture pour réactivité UI)
+        const adminToken = await getAdminToken();
+        const res = await services.vehicules.patch(`/vehicules/${vehiculeId}/assigner`, { conducteurId }, {
+          headers: { Authorization: `Bearer ${adminToken}` }
+        });
+
+        return res.data;
+      } catch (err) {
+        console.error(`[Gateway] Erreur assignerConducteur: ${err.message}`, err.response?.data || '');
+        throw new Error(err.response?.data?.message || err.message);
+      }
+    },
+    archiverVehicule: async (_, { id }, { token }) => {
+      try {
+        const adminToken = await getAdminToken();
+        const res = await services.vehicules.delete(`/vehicules/${id}`, {
+          headers: { Authorization: `Bearer ${adminToken}` }
+        });
+        return { id };
+      } catch (err) {
+        console.error(`[Gateway] Erreur archiverVehicule: ${err.message}`, err.response?.data || '');
+        throw new Error(err.response?.data?.message || err.message);
+      }
     },
 
     // Service Conducteurs
     creerConducteur: async (_, args, { token }) => {
-      const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
-      const res = await services.conducteurs.post('/api/v1/conducteurs', args, {
-        headers: { Authorization: authHeader }
-      });
-      return res.data;
+      try {
+        const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+        const res = await services.conducteurs.post('/api/v1/conducteurs', args, {
+          headers: { Authorization: authHeader }
+        });
+        return res.data;
+      } catch (err) {
+        console.error(`[Gateway] Erreur creerConducteur: ${err.message}`, err.response?.data || '');
+        throw new Error(err.response?.data?.message || err.message);
+      }
     },
     modifierConducteur: async (_, { id, ...args }, { token }) => {
-      const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
-      const res = await services.conducteurs.put(`/api/v1/conducteurs/${id}`, args, {
-        headers: { Authorization: authHeader }
-      });
-      return res.data;
+      try {
+        const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+        const res = await services.conducteurs.put(`/api/v1/conducteurs/${id}`, args, {
+          headers: { Authorization: authHeader }
+        });
+        return res.data || { id, ...args };
+      } catch (err) {
+        console.error(`[Gateway] Erreur modifierConducteur: ${err.message}`, err.response?.data || '');
+        throw new Error(err.response?.data?.message || err.message);
+      }
     },
     changerStatutConducteur: async (_, { id, statutCompte }, { token }) => {
-      const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
-      const res = await services.conducteurs.patch(`/api/v1/conducteurs/${id}/statut`, { nouveauStatut: statutCompte }, {
-        headers: { Authorization: authHeader }
-      });
-      return res.data;
+      try {
+        const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+        const res = await services.conducteurs.patch(`/api/v1/conducteurs/${id}/statut`, { nouveauStatut: statutCompte }, {
+          headers: { Authorization: authHeader }
+        });
+        return res.data;
+      } catch (err) {
+        console.error(`[Gateway] Erreur changerStatutConducteur: ${err.message}`, err.response?.data || '');
+        throw new Error(err.response?.data?.message || err.message);
+      }
     },
     changerDisponibiliteConducteur: async (_, { id, disponibilite }, { token }) => {
       const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
@@ -289,11 +396,16 @@ const resolvers = {
       return res.data;
     },
     desactiverConducteur: async (_, { id }, { token }) => {
-      const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
-      await services.conducteurs.delete(`/api/v1/conducteurs/${id}`, {
-        headers: { Authorization: authHeader }
-      });
-      return { id };
+      try {
+        const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+        await services.conducteurs.delete(`/api/v1/conducteurs/${id}`, {
+          headers: { Authorization: authHeader }
+        });
+        return { id };
+      } catch (err) {
+        console.error(`[Gateway] Erreur desactiverConducteur: ${err.message}`, err.response?.data || '');
+        throw new Error(err.response?.data?.message || err.message);
+      }
     },
 
     // Service Maintenance
@@ -344,6 +456,20 @@ const resolvers = {
         console.error(`[Gateway] Erreur synchronisation statut véhicule (clôture): ${err.message}`);
       }
 
+      return res.data;
+    },
+    demarrerMaintenance: async (_, { id }, { token }) => {
+      const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+      const res = await services.maintenance.put(`/api/v1/maintenances/${id}/demarrer`, {}, {
+        headers: { Authorization: authHeader }
+      });
+      return res.data;
+    },
+    annulerMaintenance: async (_, { id, ...args }, { token }) => {
+      const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+      const res = await services.maintenance.put(`/api/v1/maintenances/${id}/annuler`, args, {
+        headers: { Authorization: authHeader }
+      });
       return res.data;
     },
     creerTechnicien: async (_, args, { token }) => {
@@ -431,16 +557,20 @@ const server = new ApolloServer({
     return { token: '' };
   },
   formatError: (err) => {
-    // Si c'est une erreur Axios, on ne renvoie que le message simple pour éviter les références circulaires
+    console.error('[Gateway] GraphQL Error:', err.message);
+    
+    // Si c'est une erreur propagée par nos catch blocks (new Error(err.response?.data?.message || err.message))
+    // On essaie de voir si c'est un message JSON Stringifié ou juste du texte
+    let message = err.message;
+    
+    // Détection des erreurs Axios non catchées proprement
     if (err.extensions && err.extensions.exception && err.extensions.exception.isAxiosError) {
-      return {
-        message: `Erreur de communication avec le microservice : ${err.message}`,
-        path: err.path
-      };
+      const axiosErr = err.extensions.exception;
+      message = axiosErr.response?.data?.message || axiosErr.message;
     }
-    // Pour les autres erreurs, on renvoie une version simplifiée
+
     return {
-      message: err.message,
+      message: message,
       path: err.path,
       code: err.extensions?.code || 'INTERNAL_SERVER_ERROR'
     };

@@ -76,6 +76,7 @@ type Vehicule {
   kilometrage: Int!
   statut: StatutVehicule!
   conducteurAssigneId: ID
+  conducteurAssigne: Conducteur
   dateAjout: String!
   dateModification: String!
 }
@@ -96,6 +97,7 @@ type Conducteur {
   statutCompte: StatutCompte!
   disponibilite: DisponibiliteConducteur!
   dateCreation: String!
+  keycloakId: String
 }
 
 # ───────────────────────────────────────────────────────────
@@ -132,7 +134,7 @@ type Technicien {
 # ───────────────────────────────────────────────────────────
 
 type Position {
-  vehiculeId: ID!
+  vehiculeId: ID
   latitude: Float!
   longitude: Float!
   vitesse: Float!

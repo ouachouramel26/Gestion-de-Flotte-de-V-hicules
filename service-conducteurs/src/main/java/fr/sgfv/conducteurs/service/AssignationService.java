@@ -38,9 +38,11 @@ public class AssignationService {
             throw new RuntimeException("Impossible d'assigner : Conducteur inactif ou suspendu");
         }
 
-        // 2. Vérifier si le véhicule est déjà assigné activement
+        // 2. Vérifier si le véhicule est déjà assigné activement -> On termine l'ancienne au lieu de planter
         assignationRepository.findActiveByVehiculeId(request.getVehiculeId()).ifPresent(a -> {
-            throw new RuntimeException("Ce véhicule est déjà assigné à un autre conducteur de manière active");
+            a.setDateFin(LocalDateTime.now());
+            assignationRepository.save(a);
+            log.info("Ancienne assignation terminée pour le véhicule {} (remplacement)", request.getVehiculeId());
         });
 
         // 3. Fermer l'ancienne assignation du conducteur (s'il avait déjà un véhicule)
@@ -69,14 +71,14 @@ public class AssignationService {
         return AssignationResponseDto.builder()
                 .id(assignation.getId())
                 .conducteur(ConducteurDto.builder()
-                        .id(assignation.getConducteur().getId())
+                        .id(assignation.getConducteur().getId().toString())
                         .nom(assignation.getConducteur().getNom())
                         .prenom(assignation.getConducteur().getPrenom())
                         .email(assignation.getConducteur().getEmail())
                         .telephone(assignation.getConducteur().getTelephone())
                         .numeroPermis(assignation.getConducteur().getNumeroPermis())
-                        .statutCompte(assignation.getConducteur().getStatutCompte())
-                        .disponibilite(assignation.getConducteur().getDisponibilite())
+                        .statutCompte(assignation.getConducteur().getStatutCompte().name())
+                        .disponibilite(assignation.getConducteur().getDisponibilite().name())
                         .build())
                 .vehiculeId(assignation.getVehiculeId())
                 .dateDebut(assignation.getDateDebut())
