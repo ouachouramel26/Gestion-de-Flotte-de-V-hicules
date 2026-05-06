@@ -212,8 +212,8 @@ export default function ConducteursPage({ userRole }) {
     }
   };
 
-  // DELETE — désactivation Admin
-  const handleDesactiver = async (c) => {
+  // DELETE — Suppression définitive Admin
+  const handleSupprimer = async (c) => {
     if (!isAdmin) return;
     if (c.disponibilite === 'EN_MISSION') {
       toast.error('Impossible : conducteur en mission.');
@@ -223,8 +223,9 @@ export default function ConducteursPage({ userRole }) {
     toast((t) => (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
         <span style={{ fontWeight: 600, color: '#1e293b' }}>
-          Désactiver <strong>{c.prenom} {c.nom}</strong> ?
+          Supprimer définitivement <strong>{c.prenom} {c.nom}</strong> ?
         </span>
+        <p style={{ fontSize: '0.75rem', color: '#64748b', margin: 0 }}>Cette action est irréversible et supprimera le conducteur de la base de données.</p>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           <button
             onClick={async () => {
@@ -236,7 +237,7 @@ export default function ConducteursPage({ userRole }) {
                   body: JSON.stringify({
                     query: `
                       mutation($id: ID!) {
-                        desactiverConducteur(id: $id) { id }
+                        supprimerConducteur(id: $id)
                       }
                     `,
                     variables: { id: c.id }
@@ -251,7 +252,7 @@ export default function ConducteursPage({ userRole }) {
                 const json = await res.json();
                 if (json.errors) throw new Error(json.errors[0].message);
                 fetchData();
-                toast.success('Conducteur désactivé', { icon: '👤' });
+                toast.success('Conducteur supprimé définitivement', { icon: '🗑️' });
               } catch (err) {
                 toast.error(err.message);
               }
@@ -259,7 +260,7 @@ export default function ConducteursPage({ userRole }) {
             className="btn btn-danger btn-sm"
             style={{ padding: '0.4rem 1rem', fontSize: '0.8rem', borderRadius: '8px' }}
           >
-            Confirmer
+            Supprimer
           </button>
           <button
             onClick={() => toast.dismiss(t.id)}
@@ -271,7 +272,7 @@ export default function ConducteursPage({ userRole }) {
         </div>
       </div>
     ), {
-      duration: 5000,
+      duration: 6000,
       position: 'top-center',
       style: { border: '1px solid #e2e8f0', padding: '1rem', borderRadius: '12px', background: 'white', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }
     });
@@ -444,9 +445,9 @@ export default function ConducteursPage({ userRole }) {
                               <Activity size={13} />
                             </button>
                           )}
-                          {/* Désactiver — Admin uniquement */}
-                          {isAdmin && c.statutCompte !== 'INACTIF' && (
-                            <button className="btn btn-danger btn-sm" onClick={() => handleDesactiver(c)} title="Désactiver">
+                          {/* Supprimer — Admin uniquement */}
+                          {isAdmin && (
+                            <button className="btn btn-danger btn-sm" onClick={() => handleSupprimer(c)} title="Supprimer">
                               <Trash2 size={13} />
                             </button>
                           )}

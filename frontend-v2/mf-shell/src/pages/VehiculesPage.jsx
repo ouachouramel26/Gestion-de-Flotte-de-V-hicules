@@ -452,9 +452,14 @@ export default function VehiculesPage() {
                 <label>Conducteur (ACTIF & DISPONIBLE)</label>
                 <select required value={assignForm.conducteurId} onChange={e => setAssignForm({ conducteurId: e.target.value })}>
                   <option value="">-- Choisir --</option>
-                  {conducteurs.filter(c => c.statutCompte === 'ACTIF' && c.disponibilite === 'DISPONIBLE' && !c.vehiculeAssigneId).map(c => (
-                    <option key={c.id} value={c.id}>{c.nom} {c.prenom}</option>
-                  ))}
+                  {conducteurs.filter(c => c.statutCompte === 'ACTIF').map(c => {
+                    const isEnMission = c.disponibilite !== 'DISPONIBLE';
+                    return (
+                      <option key={c.id} value={c.id} disabled={isEnMission}>
+                        {c.nom} {c.prenom} {isEnMission ? '(En mission)' : (c.vehiculeAssigneId ? '(Changement de véhicule)' : '')}
+                      </option>
+                    );
+                  })}
                 </select>
                 {selectedVehicule.statut !== 'DISPONIBLE' && (
                   <p style={{ color: '#dc2626', fontSize: '0.8rem', marginTop: '0.5rem', fontWeight: 600 }}>

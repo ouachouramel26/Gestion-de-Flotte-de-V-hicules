@@ -82,43 +82,51 @@ export default function LocalisationPage() {
 
         let locData = json.data.positionsActuelles || [];
 
-        // Fusionner avec les infos véhicules
-        let mergedPositions = locData.map(pos => {
-          const v = vData.find(x => x.id === pos.vehiculeId);
-          return {
-            ...pos,
-            id: pos.vehiculeId, // Utiliser vehiculeId comme ID pour les markers
-            immatriculation: v?.plaque || 'Inconnu',
-            marque: v?.marque || '',
-            modele: v?.modele || '',
-            conducteur: v?.conducteurAssigne ? `${v.conducteurAssigne.nom} ${v.conducteurAssigne.prenom}` : 'Non assigné'
-          };
-        });
+        // 1. Identifier tous les véhicules "EN_MISSION"
+        let vehiclesInMission = vData.filter(v => v.statut === 'EN_MISSION');
 
-        // Si conducteur : ne montrer que son véhicule
+        // 2. Filtrer par conducteur si nécessaire
         if (!isAdmin) {
           const monId = json.data.monProfil?.id;
           if (monId) {
-            mergedPositions = mergedPositions.filter(p => {
-              const veh = vData.find(v => v.id === p.vehiculeId);
-              return veh && veh.conducteurAssigneId === monId;
-            });
+            vehiclesInMission = vehiclesInMission.filter(v => v.conducteurAssigneId === monId);
           }
         }
 
-        // Fallback temporaire : on affiche tout pour voir si la data arrive
-        if (mergedPositions.length === 0) {
-          console.log("[LocalisationPage] No live positions, using all vehicles as fallback for debug");
-          const fallbacks = vData.map(v => ({
-            id: v.id, vehiculeId: v.id, immatriculation: v.plaque, marque: v.marque, modele: v.modele,
-            latitude: 48.8566 + (Math.random() - 0.5) * 0.05,
-            longitude: 2.3522 + (Math.random() - 0.5) * 0.05,
-            vitesse: 0, direction: 0
-          }));
-          setPositions(fallbacks);
-        } else {
-          setPositions(mergedPositions);
-        }
+        // 3. Fusionner avec les positions réelles ou générer des fallbacks
+        const finalPositions = vehiclesInMission.map(v => {
+          const realPos = locData.find(p => p.vehiculeId === v.id);
+          
+          if (realPos) {
+            return {
+              ...realPos,
+              id: v.id,
+              vehiculeId: v.id,
+              immatriculation: v.plaque,
+              marque: v.marque,
+              modele: v.modele,
+              statut: v.statut,
+              conducteur: v.conducteurAssigne ? `${v.conducteurAssigne.nom} ${v.conducteurAssigne.prenom}` : 'Non assigné'
+            };
+          } else {
+            // Pas de position réelle : Fallback statique
+            return {
+              id: v.id,
+              vehiculeId: v.id,
+              immatriculation: v.plaque,
+              marque: v.marque,
+              modele: v.modele,
+              statut: v.statut,
+              conducteur: v.conducteurAssigne ? `${v.conducteurAssigne.nom} ${v.conducteurAssigne.prenom}` : 'Non assigné',
+              latitude: 48.8566 + (Math.random() - 0.5) * 0.02,
+              longitude: 2.3522 + (Math.random() - 0.5) * 0.02,
+              vitesse: 0,
+              direction: 0
+            };
+          }
+        });
+
+        setPositions(finalPositions);
       }
     } catch (err) { console.error(err); }
     finally { setLoading(false); }

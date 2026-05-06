@@ -16,7 +16,7 @@ const EVENT_TYPES = [
   { value: 'SEUIL_KM_ATTEINT', label: 'Seuil km atteint' },
   { value: 'MAINTENANCE_TERMINEE', label: 'Maintenance terminée' },
   { value: 'PANNE_SIGNALEE', label: 'Panne signalée' },
-  { value: 'SORTIE_ZONE', label: 'Sortie zone' },
+  { value: 'SORTIE_ZONE', label: 'Entrée zone interdite' },
   { value: 'VITESSE_EXCESSIVE', label: 'Vitesse excessive' },
 ];
 
@@ -45,7 +45,7 @@ export default function AlertesPage({ userRole }) {
   const { keycloak } = useKeycloak();
   const [alertes, setAlertes] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filterMode, setFilterMode] = useState('MOI');  // MOI par défaut désormais
+  const [filterMode, setFilterMode] = useState(keycloak.hasRealmRole('admin') ? 'ALL' : 'MOI');
   const [filterNiveau, setFilterNiveau] = useState('');
   const [filterType, setFilterType] = useState('');
 
@@ -57,10 +57,10 @@ export default function AlertesPage({ userRole }) {
       const query = `
         query($niveau: NiveauAlerte, $typeEvenement: TypeEvenementAlerte) {
           alertes(niveau: $niveau, typeEvenement: $typeEvenement) {
-            id typeEvenement niveau message vehiculeId utilisateurId estLu dateCreation
+            id typeEvenement niveau message vehiculeId utilisateurId estLu dateCreation plaque
           }
           mesAlertes {
-            id typeEvenement niveau message vehiculeId utilisateurId estLu dateCreation
+            id typeEvenement niveau message vehiculeId utilisateurId estLu dateCreation plaque
           }
         }
       `;
@@ -104,7 +104,7 @@ export default function AlertesPage({ userRole }) {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          query: `mutation($id: ID!) { lireAlerte(id: $id) { id estLu } }`,
+          query: `mutation($id: ID!) { marquerAlerteLue(id: $id) { id estLu } }`,
           variables: { id }
         })
       });
@@ -116,24 +116,42 @@ export default function AlertesPage({ userRole }) {
   const handleDelete = async (id) => {
     if (!window.confirm('Supprimer cette alerte définitivement ?')) return;
     try {
-      await fetch(`${API_BASE}/${id}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${keycloak.token}` }
+      await fetch(GRAPHQL_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${keycloak.token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          query: `mutation($id: ID!) { supprimerAlerte(id: $id) }`,
+          variables: { id }
+        })
       });
       fetchAlertes();
+      toast.success('Alerte supprimée');
     } catch (err) { console.error(err); }
   };
 
   // Marquer toutes comme lues
   const handleLireTout = async () => {
     const nonLues = alertes.filter(a => !a.estLu);
-    await Promise.all(nonLues.map(a =>
-      fetch(`${API_BASE}/${a.id}/lire`, {
-        method: 'PATCH',
-        headers: { 'Authorization': `Bearer ${keycloak.token}` }
-      }).catch(() => { })
-    ));
-    fetchAlertes();
+    try {
+      await Promise.all(nonLues.map(a =>
+        fetch(GRAPHQL_URL, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${keycloak.token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            query: `mutation($id: ID!) { marquerAlerteLue(id: $id) { id } }`,
+            variables: { id: a.id }
+          })
+        })
+      ));
+      fetchAlertes();
+      toast.success('Toutes les alertes sont marquées comme lues');
+    } catch (err) { console.error(err); }
   };
 
   // Filtrage local
@@ -262,7 +280,7 @@ export default function AlertesPage({ userRole }) {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.2rem', flexWrap: 'wrap' }}>
                       <span style={{ fontWeight: 700, color: '#1e293b', fontSize: '0.92rem' }}>
-                        {(a.typeEvenement || '').replace(/_/g, ' ')}
+                        {EVENT_TYPES.find(t => t.value === a.typeEvenement)?.label || (a.typeEvenement || '').replace(/_/g, ' ')}
                       </span>
                       <span className={`badge ${config.badge}`} style={{ fontSize: '0.62rem', padding: '0.15rem 0.55rem' }}>
                         {config.label}
