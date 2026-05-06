@@ -98,17 +98,17 @@ app.get('/api/alertes/moi',
           message, est_lu as "estLu", plaque, date_creation as "dateCreation" 
         FROM alertes WHERE `;
       
+      const params = [sub];
+      // On voit ses alertes perso (utilisateur_id) OU les alertes destinées à son rôle Admin
       if (isAdmin) {
-        // L'admin voit les alertes destinées au rôle ADMIN
-        query += "role_destinataire = 'ADMIN'";
+        query += "(utilisateur_id = $1 OR role_destinataire = 'ADMIN')";
       } else {
-        // Le technicien/conducteur voit ses alertes perso
         query += "utilisateur_id = $1";
       }
       
       query += " ORDER BY date_creation DESC";
       
-      const result = await db.query(query, isAdmin ? [] : [sub]);
+      const result = await db.query(query, params);
       res.json(result.rows);
     } catch (err) {
       console.error('Erreur /alertes/moi:', err);

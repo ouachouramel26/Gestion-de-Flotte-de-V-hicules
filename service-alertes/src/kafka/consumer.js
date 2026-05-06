@@ -70,6 +70,7 @@ const runConsumer = async () => {
   await consumer.run({
     eachMessage: async ({ topic, message }) => {
       const rawValue = message.value.toString();
+      console.log(`[KAFKA] Message reçu sur topic ${topic}`);
       const payload = JSON.parse(rawValue);
 
       try {
