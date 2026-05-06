@@ -43,14 +43,23 @@ public class AssignationService {
             a.setDateFin(LocalDateTime.now());
             assignationRepository.save(a);
             log.info("Ancienne assignation terminée pour le véhicule {} (remplacement)", request.getVehiculeId());
+            
+            // Retirer le véhicule de l'ancien conducteur
+            Conducteur oldConducteur = a.getConducteur();
+            if (oldConducteur != null) {
+                oldConducteur.setVehiculeAssigneId(null);
+                conducteurRepository.save(oldConducteur);
+            }
         });
 
-        // 3. Vérifier si le conducteur est déjà assigné à un véhicule
+        // 3. Vérifier si le conducteur est déjà assigné à un autre véhicule -> On termine l'ancienne au lieu de planter
         assignationRepository.findActiveByConducteurId(conducteur.getId()).ifPresent(activeAssignation -> {
-            throw new RuntimeException("Ce conducteur est déjà assigné au véhicule ID: " + activeAssignation.getVehiculeId());
+            activeAssignation.setDateFin(LocalDateTime.now());
+            assignationRepository.save(activeAssignation);
+            log.info("Ancienne assignation terminée pour le conducteur {} (changement de véhicule)", conducteur.getId());
         });
 
-        // 4. Créer la nouvelle assignation
+        // 4. Créer la nouvelle assignation et mettre à jour le conducteur
         Assignation newAssignation = Assignation.builder()
                 .conducteur(conducteur)
                 .vehiculeId(request.getVehiculeId())
@@ -58,6 +67,9 @@ public class AssignationService {
                 .build();
 
         Assignation savedAssignation = assignationRepository.save(newAssignation);
+        
+        conducteur.setVehiculeAssigneId(request.getVehiculeId());
+        conducteurRepository.save(conducteur);
 
         // 5. Publier l'événement avec les deux IDs (interne pour service-vehicules, Keycloak pour service-alertes)
         kafkaPublisher.publishConducteurAssigned(conducteur.getId(), conducteur.getKeycloakId(), request.getVehiculeId());

@@ -26,6 +26,12 @@ public class TechnicienController {
         return technicienService.getById(id);
     }
 
+    @GetMapping("/me")
+    public TechnicienDto getMyProfile(@org.springframework.security.core.annotation.AuthenticationPrincipal org.springframework.security.oauth2.jwt.Jwt jwt) {
+        String keycloakId = jwt.getSubject();
+        return technicienService.getByKeycloakId(keycloakId);
+    }
+
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public TechnicienDto create(@RequestBody TechnicienDto dto) {

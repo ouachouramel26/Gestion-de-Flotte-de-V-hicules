@@ -23,7 +23,7 @@ export default function DashboardPage({ userRole, userName }) {
         query GetDashboardData {
           vehicules { id plaque statut marque modele dateAjout }
           conducteurs { id }
-          maintenances { id statut typeIntervention dateCreation }
+          maintenances { id statut typeIntervention dateCreation technicienId }
           alertes(estLu: false) { id }
           mesAlertes { id }
           monProfil { id prenom nom email vehiculeAssigneId }
@@ -50,12 +50,16 @@ export default function DashboardPage({ userRole, userName }) {
         setAssignedVehicle(assigned);
       }
       
+      const isAdmin = keycloak.hasRealmRole('admin');
+      const isTechnicien = userRole === 'technicien';
       const isConducteur = userRole === 'conducteur';
 
       setStats({
         vehicules: vehicules ? vehicules.length : 0,
         conducteurs: conducteurs ? conducteurs.length : 0,
-        maintenances: maintenances ? maintenances.length : 0,
+        maintenances: (maintenances && isTechnicien && !isAdmin && monProfil) 
+          ? maintenances.filter(m => m.technicienId === monProfil.id && m.statut !== 'TERMINEE').length 
+          : (maintenances?.filter(m => m.statut !== 'TERMINEE').length || 0),
         alertes: isConducteur ? (mesAlertes?.length || 0) : (alertes?.length || 0),
         enService: vehicules ? vehicules.filter(v => v.statut === 'EN_MISSION' || v.statut === 'EN_SERVICE').length : 0,
       });
@@ -64,9 +68,14 @@ export default function DashboardPage({ userRole, userName }) {
         new Date(b.dateAjout || 0) - new Date(a.dateAjout || 0)
       ) : [];
 
-      const sortedMaintenances = maintenances ? [...maintenances].sort((a, b) => 
+      let filteredMaintenances = maintenances ? [...maintenances] : [];
+      if (isTechnicien && !isAdmin && monProfil) {
+        filteredMaintenances = filteredMaintenances.filter(m => m.technicienId === monProfil.id);
+      }
+
+      const sortedMaintenances = filteredMaintenances.sort((a, b) => 
         new Date(b.dateCreation || 0) - new Date(a.dateCreation || 0)
-      ) : [];
+      );
 
       setRecentVehicules(sortedVehicules.slice(0, 5));
       setRecentMaintenances(sortedMaintenances.slice(0, 5));
@@ -171,11 +180,11 @@ export default function DashboardPage({ userRole, userName }) {
   const rl = roleLabels[userRole] || roleLabels.admin;
 
   const statCards = [
-    { icon: Car, label: 'Véhicules', value: stats.vehicules, bg: 'blue', roles: ['admin', 'technicien'] },
+    { icon: Car, label: 'Véhicules', value: stats.vehicules, bg: 'blue', roles: ['admin'] },
     { icon: Users, label: 'Conducteurs', value: stats.conducteurs, bg: 'cyan', roles: ['admin'] },
     { icon: Wrench, label: 'Maintenances', value: stats.maintenances, bg: 'orange', roles: ['admin', 'technicien'] },
     { icon: AlertTriangle, label: 'Alertes actives', value: stats.alertes, bg: 'red', roles: ['admin', 'technicien', 'conducteur'] },
-    { icon: MapPin, label: 'En service', value: stats.enService, bg: 'green', roles: ['admin', 'technicien', 'conducteur'] },
+    { icon: MapPin, label: 'En service', value: stats.enService, bg: 'green', roles: ['admin', 'conducteur'] },
   ].filter(s => s.roles.includes(userRole));
 
   const statusBadge = (s) => {

@@ -19,16 +19,16 @@ const connectProducer = async () => {
 const sendGeofenceAlert = async (vehiculeId, typeZone, message) => {
   try {
     await producer.send({
-      topic: 'maintenance', // On utilise le topic maintenance pour que service-alertes le capte
+      topic: 'localisation-events', // Utilisé par service-alertes pour les alertes géofence
       messages: [
-        { 
+        {
           value: JSON.stringify({
             eventType: 'SORTIE_ZONE',
             vehiculeId,
             statut: typeZone === 'INTERDITE' ? 'ALERTE' : 'INFO',
             timestamp: new Date().toISOString(),
             message
-          }) 
+          })
         },
       ],
     });

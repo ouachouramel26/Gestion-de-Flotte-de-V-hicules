@@ -17,6 +17,7 @@ import java.util.stream.Collectors;
 public class TechnicienService {
 
     private final TechnicienRepository technicienRepository;
+    private final KeycloakService keycloakService;
 
     @Transactional(readOnly = true)
     public List<TechnicienDto> getAll() {
@@ -32,6 +33,13 @@ public class TechnicienService {
                 .orElseThrow(() -> new RuntimeException("Technicien introuvable"));
     }
 
+    @Transactional(readOnly = true)
+    public TechnicienDto getByKeycloakId(String keycloakId) {
+        return technicienRepository.findByKeycloakId(keycloakId)
+                .map(this::mapToDto)
+                .orElseThrow(() -> new RuntimeException("Profil technicien introuvable pour cet ID Keycloak : " + keycloakId));
+    }
+
     @Transactional
     public TechnicienDto create(TechnicienDto dto) {
         if (technicienRepository.findFirstByEmailIgnoreCase(dto.getEmail()).isPresent()) {
@@ -41,9 +49,22 @@ public class TechnicienService {
             throw new RuntimeException("Un technicien avec ce numéro de téléphone existe déjà.");
         }
 
+        // Création dans Keycloak
+        String realKeycloakId;
+        try {
+            realKeycloakId = keycloakService.createKeycloakUser(
+                    dto.getPrenom(),
+                    dto.getNom(),
+                    dto.getEmail(),
+                    "sgfv2026"
+            );
+        } catch (Exception e) {
+            throw new RuntimeException("Erreur Keycloak : " + e.getMessage());
+        }
+
         Technicien technicien = Technicien.builder()
                 .id(dto.getId() != null ? dto.getId() : UUID.randomUUID())
-                .keycloakId(dto.getKeycloakId() != null ? dto.getKeycloakId() : UUID.randomUUID().toString())
+                .keycloakId(realKeycloakId)
                 .nom(dto.getNom())
                 .prenom(dto.getPrenom())
                 .email(dto.getEmail())

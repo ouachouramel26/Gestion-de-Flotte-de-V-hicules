@@ -19,5 +19,7 @@ public class MaintenanceEvent {
     private UUID maintenanceId;
     private UUID vehiculeId;
     private MaintenanceStatut statut;
+    private String technicienId; // ID Keycloak du technicien
+    private String conducteurId; // ID Keycloak du conducteur (si applicable)
     private LocalDateTime timestamp;
 }

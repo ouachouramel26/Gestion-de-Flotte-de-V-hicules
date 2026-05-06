@@ -16,6 +16,15 @@ const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
 
 const gpsProto = grpc.loadPackageDefinition(packageDefinition).gps;
 
+const { Pool } = require('pg');
+const vehPool = new Pool({
+  host:     process.env.VEHICULES_DB_HOST     || 'postgres-vehicules',
+  port:     parseInt(process.env.VEHICULES_DB_PORT || '5432'),
+  database: process.env.VEHICULES_DB_NAME     || 'vehicules_db',
+  user:     process.env.VEHICULES_DB_USER     || 'sgfv',
+  password: process.env.VEHICULES_DB_PASSWORD || 'sgfv_secret',
+});
+
 /**
  * Logique du flux de positions (Client Streaming)
  */
@@ -23,21 +32,33 @@ const streamPositions = (call, callback) => {
   let count = 0;
 
   call.on('data', async (position) => {
-    count++;
     const { vehicule_id, latitude, longitude, vitesse, direction, horodatage } = position;
     
-    // 1. Conversion de l'horodatage google.protobuf.Timestamp vers JS Date
-    const date = horodatage ? new Date(horodatage.seconds * 1000 + horodatage.nanos / 1000000) : new Date();
-
     try {
-      // 2. Insertion dans TimescaleDB avec conversion PostGIS
+      // 1. Vérifier si le véhicule est EN_MISSION avant de traiter quoi que ce soit
+      const vehCheck = await vehPool.query(
+        "SELECT statut FROM vehicules WHERE id = $1",
+        [vehicule_id]
+      );
+      
+      if (!vehCheck.rows.length || vehCheck.rows[0].statut !== 'EN_MISSION') {
+        // Le véhicule n'est pas en mission, on ignore silencieusement la position
+        return;
+      }
+
+      count++;
+      
+      // 2. Conversion de l'horodatage
+      const date = horodatage ? new Date(horodatage.seconds * 1000 + horodatage.nanos / 1000000) : new Date();
+
+      // 3. Insertion dans TimescaleDB
       await db.query(
         `INSERT INTO positions (horodatage, vehicule_id, latitude, longitude, vitesse, direction, point_geo)
          VALUES ($1, $2, $3, $4, $5, $6, ST_SetSRID(ST_MakePoint($4, $3), 4326))`,
         [date, vehicule_id, latitude, longitude, vitesse, direction]
       );
 
-      // 3. Vérification de Géo-fencing (Moteur spatial PostGIS)
+      // 4. Vérification de Géo-fencing
       const zoneCheck = await db.query(
         `SELECT id, nom, type FROM zones 
          WHERE active = true 

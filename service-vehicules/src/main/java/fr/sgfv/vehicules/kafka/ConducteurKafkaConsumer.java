@@ -17,8 +17,10 @@ public class ConducteurKafkaConsumer {
 
     private final VehiculeRepository vehiculeRepository;
 
+    private final VehiculeKafkaProducer vehiculeKafkaProducer;
+
     @KafkaListener(
-        topics = "conducteurs",
+        topics = {"conducteurs", "maintenance"},
         groupId = "service-vehicules",
         containerFactory = "kafkaListenerContainerFactory"
     )
@@ -36,7 +38,37 @@ public class ConducteurKafkaConsumer {
             case "CONDUCTEUR_ASSIGNED"    -> traiterAssigned(message);
             case "CONDUCTEUR_UNASSIGNED"  -> traiterUnassigned(message);
             case "CONDUCTEUR_DEACTIVATED" -> traiterDeactivated(message);
+            case "MAINTENANCE_SIGNALED", "MAINTENANCE_PLANNED", "MAINTENANCE_STARTED", 
+                 "MAINTENANCE_COMPLETED", "MAINTENANCE_CANCELLED" -> traiterMaintenance(message);
             default -> log.debug("[Kafka] {} ignoré par service-vehicules", eventType);
+        }
+    }
+
+    private void traiterMaintenance(Map<String, Object> message) {
+        try {
+            String eventType = (String) message.get("eventType");
+            UUID vehiculeId = UUID.fromString((String) message.get("vehiculeId"));
+
+            vehiculeRepository.findById(vehiculeId).ifPresent(v -> {
+                String statutPrecedent = v.getStatut();
+                String nouveauStatut = null;
+
+                switch (eventType) {
+                    case "MAINTENANCE_SIGNALED" -> nouveauStatut = "EN_PANNE";
+                    case "MAINTENANCE_PLANNED", "MAINTENANCE_STARTED" -> nouveauStatut = "EN_MAINTENANCE";
+                    case "MAINTENANCE_COMPLETED", "MAINTENANCE_CANCELLED" -> nouveauStatut = "DISPONIBLE";
+                }
+
+                if (nouveauStatut != null && !nouveauStatut.equals(statutPrecedent)) {
+                    log.info("[Kafka] Automate Statut : {} (véhicule {}) : {} -> {}", 
+                        eventType, v.getPlaque(), statutPrecedent, nouveauStatut);
+                    v.setStatut(nouveauStatut);
+                    vehiculeRepository.save(v);
+                    vehiculeKafkaProducer.envoyerStatutChange(v, statutPrecedent);
+                }
+            });
+        } catch (Exception e) {
+            log.error("[Kafka] Erreur traitement maintenance : {}", e.getMessage());
         }
     }
 

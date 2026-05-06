@@ -32,14 +32,32 @@ app.get('/health', (req, res) => {
   res.json({ status: 'UP', service: 'service-localisation' });
 });
 
+// Connexion directe à la BDD vehicules (même réseau Docker) pour éviter le 401
+const { Pool } = require('pg');
+const vehPool = new Pool({
+  host:     process.env.VEHICULES_DB_HOST     || 'postgres-vehicules',
+  port:     parseInt(process.env.VEHICULES_DB_PORT || '5432'),
+  database: process.env.VEHICULES_DB_NAME     || 'vehicules_db',
+  user:     process.env.VEHICULES_DB_USER     || 'sgfv',
+  password: process.env.VEHICULES_DB_PASSWORD || 'sgfv_secret',
+});
+
 // Enregistrer une position GPS et vérifier géofencing (REST fallback du gRPC)
 app.post('/api/v1/positions', async (req, res) => {
   try {
     const { vehiculeId, latitude, longitude, vitesse, direction } = req.body;
+    
     if (!vehiculeId || latitude == null || longitude == null) {
       return res.status(400).json({ error: 'vehiculeId, latitude, longitude requis' });
     }
 
+    // 0. Vérifier si le véhicule est EN_MISSION avant de stocker quoi que ce soit
+    const vehCheck = await vehPool.query("SELECT statut FROM vehicules WHERE id = $1", [vehiculeId]);
+    if (!vehCheck.rows.length || vehCheck.rows[0].statut !== 'EN_MISSION') {
+      return res.status(200).json({ message: 'Position ignorée : véhicule pas en mission' });
+    }
+
+    console.log(`[POSITIONS] Recu vehiculeId=${vehiculeId} lat=${latitude} lng=${longitude}`);
     const now = new Date();
 
     // 1. Insérer la position dans TimescaleDB (avec ou sans PostGIS)
@@ -167,16 +185,6 @@ app.delete('/api/v1/zones/:id', async (req, res) => {
 });
 
 // Récupérer les véhicules EN_MISSION et leurs positions (GET)
-// Connexion directe à la BDD vehicules (même réseau Docker) pour éviter le 401
-const { Pool } = require('pg');
-const vehPool = new Pool({
-  host:     process.env.VEHICULES_DB_HOST     || 'postgres-vehicules',
-  port:     parseInt(process.env.VEHICULES_DB_PORT || '5432'),
-  database: process.env.VEHICULES_DB_NAME     || 'vehicules_db',
-  user:     process.env.VEHICULES_DB_USER     || 'sgfv',
-  password: process.env.VEHICULES_DB_PASSWORD || 'sgfv_secret',
-});
-
 app.get('/api/v1/vehicules', async (req, res) => {
   try {
     // 1. Récupérer les véhicules EN_MISSION depuis la BDD vehicules directement
@@ -202,16 +210,29 @@ app.get('/api/v1/vehicules', async (req, res) => {
 
     const vehicules = vehResult.rows.map(v => {
       const pos = posMap[v.id];
+      const lat = pos ? pos.latitude  : 48.8566 + (Math.random() - 0.5) * 0.1;
+      const lng = pos ? pos.longitude : 2.3522  + (Math.random() - 0.5) * 0.1;
+      
+      // Si c'est une position générée aléatoirement, on l'envoie à notre propre endpoint
+      // pour déclencher la vérification des zones interdites (simulation réaliste).
+      if (!pos) {
+        fetch(`http://localhost:${process.env.PORT || 8084}/api/v1/positions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ vehiculeId: v.id, latitude: lat, longitude: lng, vitesse: 50, direction: 90 })
+        }).catch(err => console.error("Sim error:", err.message));
+      }
+
       return {
         id:            v.id,
         immatriculation: v.plaque,
         marque:        v.marque  || 'Véhicule',
         modele:        v.modele  || '',
         statut:        v.statut,
-        latitude:      pos ? pos.latitude  : 48.8566 + (Math.random() - 0.5) * 0.1,
-        longitude:     pos ? pos.longitude : 2.3522  + (Math.random() - 0.5) * 0.1,
-        vitesse:       pos ? pos.vitesse   : Math.floor(Math.random() * 90),
-        direction:     pos ? pos.direction : Math.floor(Math.random() * 360)
+        latitude:      lat,
+        longitude:     lng,
+        vitesse:       pos ? pos.vitesse   : 50,
+        direction:     pos ? pos.direction : 90
       };
     });
 

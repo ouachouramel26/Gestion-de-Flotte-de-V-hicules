@@ -54,7 +54,7 @@ public class MaintenanceService {
                 .build();
 
         Maintenance saved = maintenanceRepository.save(maintenance);
-        kafkaProducer.publishMaintenanceEvent(saved.getId(), saved.getVehiculeId(), saved.getStatut(), "MAINTENANCE_SIGNALED");
+        kafkaProducer.publishMaintenanceEvent(saved.getId(), saved.getVehiculeId(), saved.getStatut(), "MAINTENANCE_SIGNALED", null, null);
         return mapToDto(saved);
     }
 
@@ -75,7 +75,7 @@ public class MaintenanceService {
         maintenance.setStatut(MaintenanceStatut.PLANIFIEE);
 
         Maintenance saved = maintenanceRepository.save(maintenance);
-        kafkaProducer.publishMaintenanceEvent(saved.getId(), saved.getVehiculeId(), saved.getStatut(), "MAINTENANCE_PLANNED");
+        kafkaProducer.publishMaintenanceEvent(saved.getId(), saved.getVehiculeId(), saved.getStatut(), "MAINTENANCE_PLANNED", technicien.getKeycloakId(), null);
         return mapToDto(saved);
     }
 
@@ -96,7 +96,8 @@ public class MaintenanceService {
         maintenance.setStatut(MaintenanceStatut.EN_COURS);
 
         Maintenance saved = maintenanceRepository.save(maintenance);
-        kafkaProducer.publishMaintenanceEvent(saved.getId(), saved.getVehiculeId(), saved.getStatut(), "MAINTENANCE_STARTED");
+        String techKeycloakId = saved.getTechnicien() != null ? saved.getTechnicien().getKeycloakId() : null;
+        kafkaProducer.publishMaintenanceEvent(saved.getId(), saved.getVehiculeId(), saved.getStatut(), "MAINTENANCE_STARTED", techKeycloakId, null);
         return mapToDto(saved);
     }
 
@@ -115,7 +116,8 @@ public class MaintenanceService {
         maintenance.setStatut(MaintenanceStatut.TERMINEE);
 
         Maintenance saved = maintenanceRepository.save(maintenance);
-        kafkaProducer.publishMaintenanceEvent(saved.getId(), saved.getVehiculeId(), saved.getStatut(), "MAINTENANCE_COMPLETED");
+        String techKeycloakId = saved.getTechnicien() != null ? saved.getTechnicien().getKeycloakId() : null;
+        kafkaProducer.publishMaintenanceEvent(saved.getId(), saved.getVehiculeId(), saved.getStatut(), "MAINTENANCE_COMPLETED", techKeycloakId, null);
         
         // Technicien repasse DISPONIBLE ? Hors scope direct si non géré ici, 
         // mais pourrions mettre technicien.disponibilite=DISPONIBLE.
@@ -139,7 +141,8 @@ public class MaintenanceService {
 
         maintenance.setStatut(MaintenanceStatut.ANNULEE);
         Maintenance saved = maintenanceRepository.save(maintenance);
-        kafkaProducer.publishMaintenanceEvent(saved.getId(), saved.getVehiculeId(), saved.getStatut(), "MAINTENANCE_CANCELLED");
+        String techKeycloakId = saved.getTechnicien() != null ? saved.getTechnicien().getKeycloakId() : null;
+        kafkaProducer.publishMaintenanceEvent(saved.getId(), saved.getVehiculeId(), saved.getStatut(), "MAINTENANCE_CANCELLED", techKeycloakId, null);
         return mapToDto(saved);
     }
 

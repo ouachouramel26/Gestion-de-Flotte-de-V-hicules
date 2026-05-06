@@ -51,6 +51,7 @@ enum TypeEvenementAlerte {
   REVISION_PLANIFIEE
   PERMIS_EXPIRE
   SEUIL_KM_ATTEINT
+  MAINTENANCE_DEBUTEE
   MAINTENANCE_TERMINEE
   PANNE_SIGNALEE
   SORTIE_ZONE
@@ -169,6 +170,7 @@ type Alerte {
   estLu: Boolean!
   dateLecture: String
   dateCreation: String!
+  plaque: String
 }
 
 # ───────────────────────────────────────────────────────────
@@ -201,7 +203,7 @@ type Query {
   zone(id: ID!): Zone
 
   # service-alertes
-  alertes(niveau: NiveauAlerte, estLu: Boolean, typeEvenement: TypeEvenementAlerte): [Alerte!]!
+  alertes(niveau: NiveauAlerte, estLu: Boolean, typeEvenement: TypeEvenementAlerte, role: RoleDestinataire): [Alerte!]!
   alerte(id: ID!): Alerte
   mesAlertes: [Alerte!]!
 }
@@ -225,6 +227,7 @@ type Mutation {
   changerStatutConducteur(id: ID!, statutCompte: StatutCompte!): Conducteur!
   changerDisponibiliteConducteur(id: ID!, disponibilite: DisponibiliteConducteur!): Conducteur!
   desactiverConducteur(id: ID!): Conducteur!
+  supprimerConducteur(id: ID!): Boolean!
 
   # service-maintenance
   signalerMaintenance(vehiculeId: ID!, typeIntervention: String!, description: String): Maintenance!

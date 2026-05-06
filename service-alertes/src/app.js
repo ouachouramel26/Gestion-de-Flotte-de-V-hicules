@@ -31,7 +31,7 @@ app.get('/api/alertes',
   authorize('admin', 'technicien'),
   async (req, res) => {
     try {
-      const { niveau, estLu, typeEvenement } = req.query;
+      const { niveau, estLu, typeEvenement, role } = req.query;
       let query = `
         SELECT 
           id, 
@@ -58,11 +58,18 @@ app.get('/api/alertes',
         params.push(typeEvenement);
         query += ` AND type_evenement = $${params.length}`;
       }
+      if (role) {
+        params.push(role);
+        query += ` AND role_destinataire = $${params.length}`;
+      }
 
       // Filtre de sécurité : Si ce n'est pas un admin, il ne voit que ses alertes strictement personnelles
       if (!req.userRoles.includes('admin')) {
         params.push(req.user.sub);
         query += ` AND utilisateur_id = $${params.length}`;
+      } else if (!role) {
+        // L'admin voit tout SAUF les alertes destinées EXCLUSIVEMENT aux conducteurs (si aucun rôle spécifié)
+        query += " AND (role_destinataire IN ('ADMIN', 'TECHNICIEN') OR role_destinataire IS NULL)";
       }
 
       query += ' ORDER BY date_creation DESC';

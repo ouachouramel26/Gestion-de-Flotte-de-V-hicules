@@ -107,18 +107,38 @@ const resolvers = {
       });
       return res.data;
     },
-    monProfil: async (_, __, { token }) => {
-      try {
-        const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
-        const res = await services.conducteurs.get('/api/v1/conducteurs/me', {
-          headers: { Authorization: authHeader }
-        });
-        console.log('DEBUG: monProfil data:', res.data);
-        return res.data;
-      } catch (err) {
-        console.error(`[Gateway] Error fetching my profile: ${err.message}`);
-        return null;
+    monProfil: async (_, __, { user, token }) => {
+      if (!user) return null;
+      const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+      const roles = user.realm_access?.roles || [];
+
+      // On essaie d'abord le service correspondant au rôle prioritaire
+      if (roles.includes('technicien')) {
+        try {
+          const res = await services.maintenance.get('/api/v1/techniciens/me', { headers: { Authorization: authHeader } });
+          if (res.data) return res.data;
+        } catch (e) {}
       }
+      
+      if (roles.includes('conducteur')) {
+        try {
+          const res = await services.conducteurs.get('/api/v1/conducteurs/me', { headers: { Authorization: authHeader } });
+          if (res.data) return res.data;
+        } catch (e) {}
+      }
+
+      // Si on n'a rien trouvé avec les rôles, on essaie quand même les deux au cas où (fallback)
+      try {
+        const res = await services.maintenance.get('/api/v1/techniciens/me', { headers: { Authorization: authHeader } });
+        if (res.data) return res.data;
+      } catch (e) {}
+
+      try {
+        const res = await services.conducteurs.get('/api/v1/conducteurs/me', { headers: { Authorization: authHeader } });
+        if (res.data) return res.data;
+      } catch (e) {}
+
+      return null;
     },
 
     // Service Maintenance
@@ -173,12 +193,12 @@ const resolvers = {
     },
 
     // Service Alertes
-    alertes: async (_, { niveau, estLu, typeEvenement }, { token }) => {
+    alertes: async (_, { niveau, estLu, typeEvenement, role }, { token }) => {
       try {
-        console.log('[Gateway] Fetching alertes...');
+        console.log(`[Gateway] Fetching alertes (role=${role || 'all'})...`);
         const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
         const res = await services.alertes.get('/api/alertes', {
-          params: { niveau, estLu, typeEvenement },
+          params: { niveau, estLu, typeEvenement, role },
           headers: { Authorization: authHeader }
         });
         console.log(`[Gateway] Found ${res.data?.length || 0} alertes`);
@@ -314,9 +334,6 @@ const resolvers = {
       } catch (err) {
         const errorMsg = err.response?.data?.message || err.message;
         console.error(`[Gateway] Erreur modifierVehicule (ID: ${id}): ${errorMsg}`);
-        if (err.response) {
-            console.error(`[Gateway] Détails erreur:`, JSON.stringify(err.response.data));
-        }
         throw new Error(errorMsg);
       }
     },
@@ -361,17 +378,12 @@ const resolvers = {
         const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
         
         // 1. Appeler le service Conducteurs pour créer l'assignation officielle
+        // Ce service publiera un événement Kafka que le service Véhicules et le service Alertes écouteront.
         await services.conducteurs.post('/api/v1/assignations', { vehiculeId, conducteurId }, {
           headers: { Authorization: authHeader }
         });
 
-        // 2. Appeler le service Véhicules pour mettre à jour l'ID conducteur immédiatement (Double-écriture pour réactivité UI)
-        const adminToken = await getAdminToken();
-        const res = await services.vehicules.patch(`/vehicules/${vehiculeId}/assigner`, { conducteurId }, {
-          headers: { Authorization: `Bearer ${adminToken}` }
-        });
-
-        return res.data;
+        return { id: vehiculeId, conducteurAssigneId: conducteurId };
       } catch (err) {
         console.error(`[Gateway] Erreur assignerConducteur: ${err.message}`, err.response?.data || '');
         throw new Error(err.response?.data?.message || err.message);
@@ -443,6 +455,18 @@ const resolvers = {
         return { id };
       } catch (err) {
         console.error(`[Gateway] Erreur desactiverConducteur: ${err.message}`, err.response?.data || '');
+        throw new Error(err.response?.data?.message || err.message);
+      }
+    },
+    supprimerConducteur: async (_, { id }, { token }) => {
+      try {
+        const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+        await services.conducteurs.delete(`/api/v1/conducteurs/${id}`, {
+          headers: { Authorization: authHeader }
+        });
+        return true;
+      } catch (err) {
+        console.error(`[Gateway] Erreur supprimerConducteur: ${err.message}`, err.response?.data || '');
         throw new Error(err.response?.data?.message || err.message);
       }
     },
@@ -549,9 +573,24 @@ const resolvers = {
     },
 
     // Service Alertes
-    marquerAlerteLue: async (_, { id }) => {
-      const res = await services.alertes.patch(`/api/alertes/${id}/lire`);
+    marquerAlerteLue: async (_, { id }, { token }) => {
+      const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+      const res = await services.alertes.patch(`/api/alertes/${id}/lire`, {}, {
+        headers: { Authorization: authHeader }
+      });
       return res.data;
+    },
+    supprimerAlerte: async (_, { id }, { token }) => {
+      try {
+        const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+        await services.alertes.delete(`/api/alertes/${id}`, {
+          headers: { Authorization: authHeader }
+        });
+        return true;
+      } catch (err) {
+        console.error(`[Gateway] Erreur supprimerAlerte: ${err.message}`);
+        return false;
+      }
     },
 
     // Service Localisation

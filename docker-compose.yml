@@ -262,11 +262,7 @@ services:
         condition: service_healthy
     networks:
       - fleet-network
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8180/health/ready || exit 1"]
-      interval: 20s
-      timeout: 10s
-      retries: 10
+
 
   # ─────────────────────────────────────────────────────────────
   # OBSERVABILITÉ
@@ -434,6 +430,8 @@ services:
       # On force Keycloak 8180
       SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://keycloak:8180/realms/sgfv/protocol/openid-connect/certs
       KEYCLOAK_REALM: sgfv
+      KEYCLOAK_INTERNAL_URL: http://keycloak:8180
+      KEYCLOAK_AUTH_SERVER_URL: http://localhost:8180
       KEYCLOAK_RESOURCE: sgfv-backend
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
       OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf

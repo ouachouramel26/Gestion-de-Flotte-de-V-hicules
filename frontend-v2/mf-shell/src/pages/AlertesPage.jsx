@@ -11,7 +11,8 @@ const GRAPHQL_URL = 'http://localhost:4000/graphql';
 const EVENT_TYPES = [
   { value: '', label: 'Tous les types' },
   { value: 'VEHICULE_ASSIGNE', label: 'Véhicule assigné' },
-  { value: 'REVISION_PLANIFIEE', label: 'Révision planifiée' },
+  { value: 'REVISION_PLANIFIEE', label: 'Maintenance planifiée' },
+  { value: 'MAINTENANCE_DEBUTEE', label: 'Maintenance débutée' },
   { value: 'PERMIS_EXPIRE', label: 'Permis expirant' },
   { value: 'SEUIL_KM_ATTEINT', label: 'Seuil km atteint' },
   { value: 'MAINTENANCE_TERMINEE', label: 'Maintenance terminée' },
@@ -54,16 +55,6 @@ export default function AlertesPage({ userRole }) {
 
   const fetchAlertes = useCallback(async () => {
     try {
-      const query = `
-        query($niveau: NiveauAlerte, $typeEvenement: TypeEvenementAlerte) {
-          alertes(niveau: $niveau, typeEvenement: $typeEvenement) {
-            id typeEvenement niveau message vehiculeId utilisateurId estLu dateCreation plaque
-          }
-          mesAlertes {
-            id typeEvenement niveau message vehiculeId utilisateurId estLu dateCreation plaque
-          }
-        }
-      `;
       const res = await fetch(GRAPHQL_URL, {
         method: 'POST',
         headers: {
@@ -71,10 +62,20 @@ export default function AlertesPage({ userRole }) {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          query,
+          query: `
+            query($niveau: NiveauAlerte, $typeEvenement: TypeEvenementAlerte, $role: RoleDestinataire) {
+              alertes(niveau: $niveau, typeEvenement: $typeEvenement, role: $role) {
+                id typeEvenement niveau message vehiculeId utilisateurId estLu dateCreation plaque roleDestinataire
+              }
+              mesAlertes {
+                id typeEvenement niveau message vehiculeId utilisateurId estLu dateCreation plaque roleDestinataire
+              }
+            }
+          `,
           variables: {
             niveau: filterNiveau || null,
-            typeEvenement: filterType || null
+            typeEvenement: filterType || null,
+            role: isAdmin ? "ADMIN" : null
           }
         })
       });

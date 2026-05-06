@@ -68,6 +68,6 @@ public class ConducteurController {
     @PreAuthorize("hasRole('admin')")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable UUID id) {
-        conducteurService.deactivateConducteur(id);
+        conducteurService.deleteConducteur(id);
     }
 }

@@ -35,7 +35,10 @@ function authenticate(req, res, next) {
       return res.status(401).json({ error: 'Token invalide ou expiré' });
     }
     req.user = decoded;
-    req.userRoles = decoded?.realm_access?.roles || [];
+    // Extraire les rôles depuis realm_access ET resource_access (client sgfv_public)
+    const realmRoles = decoded?.realm_access?.roles || [];
+    const clientRoles = decoded?.resource_access?.['sgfv_public']?.roles || [];
+    req.userRoles = [...new Set([...realmRoles, ...clientRoles])];
     next();
   });
 }

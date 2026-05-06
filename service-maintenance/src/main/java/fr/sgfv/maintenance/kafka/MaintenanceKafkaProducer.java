@@ -21,13 +21,15 @@ public class MaintenanceKafkaProducer {
     @Value("${kafka.topics.maintenance-started:maintenance}")
     private String maintenanceTopic;
 
-    public void publishMaintenanceEvent(UUID maintenanceId, UUID vehiculeId, MaintenanceStatut statut, String eventType) {
+    public void publishMaintenanceEvent(UUID maintenanceId, UUID vehiculeId, MaintenanceStatut statut, String eventType, String techId, String driverId) {
         MaintenanceEvent event = MaintenanceEvent.builder()
                 .eventId(UUID.randomUUID().toString())
                 .eventType(eventType)
                 .maintenanceId(maintenanceId)
                 .vehiculeId(vehiculeId)
                 .statut(statut)
+                .technicienId(techId)
+                .conducteurId(driverId)
                 .timestamp(LocalDateTime.now())
                 .build();
                 

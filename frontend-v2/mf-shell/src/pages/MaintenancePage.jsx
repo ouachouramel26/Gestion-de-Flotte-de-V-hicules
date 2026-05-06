@@ -36,6 +36,7 @@ export default function MaintenancePage({ userRole }) {
   const [maintenances, setMaintenances]   = useState([]);
   const [vehicules, setVehicules]         = useState([]);
   const [techniciens, setTechniciens]     = useState([]);
+  const [myId, setMyId]                   = useState(null);
   const [loading, setLoading]             = useState(true);
   const [filterStatut, setFilterStatut]   = useState('');
   const [search, setSearch]               = useState('');
@@ -79,6 +80,7 @@ export default function MaintenancePage({ userRole }) {
           }
           vehicules { id plaque marque modele }
           techniciens { id nom prenom disponibilite }
+          monProfil { id }
         }
       `;
       const res = await fetch(GRAPHQL_URL, {
@@ -94,6 +96,7 @@ export default function MaintenancePage({ userRole }) {
         if (json.data.maintenances) setMaintenances(json.data.maintenances);
         if (json.data.vehicules) setVehicules(json.data.vehicules);
         if (json.data.techniciens) setTechniciens(json.data.techniciens);
+        if (json.data.monProfil) setMyId(json.data.monProfil.id);
       }
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
@@ -308,10 +311,18 @@ export default function MaintenancePage({ userRole }) {
     }
   };
 
-  const filtered = maintenances.filter(m =>
-    getVehiclePlate(m.vehiculeId).toLowerCase().includes(search.toLowerCase()) ||
-    m.typeIntervention?.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = maintenances.filter(m => {
+    // 1. Restriction Technicien : ne voit que ses propres interventions
+    if (isTechnicien && !isAdmin && myId) {
+      if (m.technicienId !== myId) return false;
+    }
+
+    // 2. Filtre de recherche par plaque ou type
+    const matchesSearch = getVehiclePlate(m.vehiculeId).toLowerCase().includes(search.toLowerCase()) ||
+                          m.typeIntervention?.toLowerCase().includes(search.toLowerCase());
+    
+    return matchesSearch;
+  });
 
   const today = new Date().toISOString().split('T')[0];
 
@@ -323,7 +334,7 @@ export default function MaintenancePage({ userRole }) {
           <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <Wrench size={26} color="#d97706" /> Maintenance
           </h1>
-          <p className="page-subtitle">{maintenances.length} dossier(s) enregistré(s)</p>
+          <p className="page-subtitle">{filtered.length} dossier(s)</p>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
           <div className="search-bar">
