@@ -139,8 +139,8 @@ type Position {
   vehiculeId: ID
   latitude: Float!
   longitude: Float!
-  vitesse: Float!
-  direction: Float!
+  vitesse: Float
+  direction: Float
   horodatage: String!
 }
 

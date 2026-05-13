@@ -244,6 +244,9 @@ spec:
           envFrom:
             - configMapRef:
                 name: config-localisation
+          env:
+            - name: DATABASE_URL
+              value: "postgresql://sgfv:sgfv_secret@postgres-localisation:5432/localisation_db?sslmode=no-verify"
           resources:
             requests:
               memory: "128Mi"
@@ -310,6 +313,10 @@ spec:
             limits:
               memory: "256Mi"
               cpu: "250m"
+          volumeMounts:
+            - name: code-vol
+              mountPath: /app/src/app.js
+              subPath: app.js
           startupProbe:
             httpGet:
               path: /health
@@ -331,6 +338,10 @@ spec:
             periodSeconds: 10
             failureThreshold: 10
             timeoutSeconds: 5
+      volumes:
+        - name: code-vol
+          configMap:
+            name: alertes-code
 
 ---
 # ─────────────────────────────────────────────────
@@ -364,18 +375,20 @@ spec:
               value: "production"
             - name: PORT
               value: "4000"
-            - name: VEHICULES_SERVICE_URL
+            - name: SERVICE_VEHICULES_URL
               value: "http://service-vehicules:8081"
-            - name: CONDUCTEURS_SERVICE_URL
+            - name: SERVICE_CONDUCTEURS_URL
               value: "http://service-conducteurs:8082"
-            - name: MAINTENANCE_SERVICE_URL
+            - name: SERVICE_MAINTENANCE_URL
               value: "http://service-maintenance:8083"
-            - name: LOCALISATION_SERVICE_URL
+            - name: SERVICE_LOCALISATION_URL
               value: "http://service-localisation:8084"
-            - name: ALERTES_SERVICE_URL
+            - name: SERVICE_ALERTES_URL
               value: "http://service-alertes:3002"
             - name: KEYCLOAK_URL
               value: "http://keycloak:8080"
+            - name: KEYCLOAK_JWKS_URI
+              value: "http://keycloak:8080/realms/sgfv/protocol/openid-connect/certs"
           resources:
             requests:
               memory: "128Mi"
@@ -383,22 +396,30 @@ spec:
             limits:
               memory: "256Mi"
               cpu: "250m"
+          volumeMounts:
+            - name: schema-vol
+              mountPath: /app/graphQL/schema.graphql
+              subPath: schema.graphql
           startupProbe:
             httpGet:
-              path: /health
+              path: /.well-known/apollo/server-health
               port: 4000
             initialDelaySeconds: 10
             periodSeconds: 5
             failureThreshold: 20
           livenessProbe:
             httpGet:
-              path: /health
+              path: /.well-known/apollo/server-health
               port: 4000
             periodSeconds: 30
             failureThreshold: 5
           readinessProbe:
             httpGet:
-              path: /health
+              path: /.well-known/apollo/server-health
               port: 4000
             periodSeconds: 10
             failureThreshold: 5
+      volumes:
+        - name: schema-vol
+          configMap:
+            name: gateway-schema

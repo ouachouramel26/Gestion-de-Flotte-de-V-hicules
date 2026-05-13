@@ -30,7 +30,7 @@ export default function DashboardPage({ userRole, userName }) {
         }
       `;
 
-      const response = await fetch('http://localhost:4000/graphql', {
+      const response = await fetch('/graphql', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -44,12 +44,12 @@ export default function DashboardPage({ userRole, userName }) {
 
       const { vehicules, conducteurs, maintenances, alertes, mesAlertes, monProfil } = result.data;
       setMyProfile(monProfil);
-      
+
       if (monProfil?.vehiculeAssigneId && vehicules) {
         const assigned = vehicules.find(v => v.id === monProfil.vehiculeAssigneId);
         setAssignedVehicle(assigned);
       }
-      
+
       const isAdmin = keycloak.hasRealmRole('admin');
       const isTechnicien = userRole === 'technicien';
       const isConducteur = userRole === 'conducteur';
@@ -57,14 +57,14 @@ export default function DashboardPage({ userRole, userName }) {
       setStats({
         vehicules: vehicules ? vehicules.length : 0,
         conducteurs: conducteurs ? conducteurs.length : 0,
-        maintenances: (maintenances && isTechnicien && !isAdmin && monProfil) 
-          ? maintenances.filter(m => m.technicienId === monProfil.id && m.statut !== 'TERMINEE').length 
+        maintenances: (maintenances && isTechnicien && !isAdmin && monProfil)
+          ? maintenances.filter(m => m.technicienId === monProfil.id && m.statut !== 'TERMINEE').length
           : (maintenances?.filter(m => m.statut !== 'TERMINEE').length || 0),
         alertes: isConducteur ? (mesAlertes?.length || 0) : (alertes?.length || 0),
         enService: vehicules ? vehicules.filter(v => v.statut === 'EN_MISSION' || v.statut === 'EN_SERVICE').length : 0,
       });
 
-      const sortedVehicules = vehicules ? [...vehicules].sort((a, b) => 
+      const sortedVehicules = vehicules ? [...vehicules].sort((a, b) =>
         new Date(b.dateAjout || 0) - new Date(a.dateAjout || 0)
       ) : [];
 
@@ -73,7 +73,7 @@ export default function DashboardPage({ userRole, userName }) {
         filteredMaintenances = filteredMaintenances.filter(m => m.technicienId === monProfil.id);
       }
 
-      const sortedMaintenances = filteredMaintenances.sort((a, b) => 
+      const sortedMaintenances = filteredMaintenances.sort((a, b) =>
         new Date(b.dateCreation || 0) - new Date(a.dateCreation || 0)
       );
 
@@ -131,7 +131,7 @@ export default function DashboardPage({ userRole, userName }) {
 
   const handleSignalerPanne = async () => {
     if (!myProfile?.vehiculeAssigneId) return;
-    
+
     if (!window.confirm("Voulez-vous vraiment signaler une panne sur votre véhicule actuel ?")) return;
 
     setReporting(true);
@@ -151,7 +151,7 @@ export default function DashboardPage({ userRole, userName }) {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${keycloak.token}`
         },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           query: mutation,
           variables: { vId: myProfile.vehiculeAssigneId }
         })
@@ -285,9 +285,9 @@ export default function DashboardPage({ userRole, userName }) {
       {userRole === 'conducteur' && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
           <div className="card" style={{ textAlign: 'center', padding: '2rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-            <div style={{ 
-              width: 64, height: 64, borderRadius: '20px', 
-              background: '#eff6ff', color: '#2563eb', 
+            <div style={{
+              width: 64, height: 64, borderRadius: '20px',
+              background: '#eff6ff', color: '#2563eb',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               marginBottom: '1rem'
             }}>
@@ -299,9 +299,9 @@ export default function DashboardPage({ userRole, userName }) {
                 <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#1e293b' }}>
                   {assignedVehicle.marque} {assignedVehicle.modele}
                 </div>
-                <div style={{ 
-                  display: 'inline-block', marginTop: '0.75rem', 
-                  padding: '0.4rem 1rem', background: '#f8fafc', 
+                <div style={{
+                  display: 'inline-block', marginTop: '0.75rem',
+                  padding: '0.4rem 1rem', background: '#f8fafc',
                   border: '2px solid #e2e8f0', borderRadius: '8px',
                   fontFamily: 'monospace', fontWeight: 700, color: '#475569',
                   fontSize: '1.1rem', letterSpacing: '1px'
@@ -311,7 +311,7 @@ export default function DashboardPage({ userRole, userName }) {
 
                 <div style={{ marginTop: '1.5rem', display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
                   {assignedVehicle.statut === 'DISPONIBLE' && (
-                    <button 
+                    <button
                       className="btn btn-primary"
                       disabled={updatingStatus}
                       onClick={() => handleUpdateStatus('EN_MISSION')}
@@ -321,7 +321,7 @@ export default function DashboardPage({ userRole, userName }) {
                     </button>
                   )}
                   {assignedVehicle.statut === 'EN_MISSION' && (
-                    <button 
+                    <button
                       className="btn btn-success"
                       disabled={updatingStatus}
                       onClick={() => handleUpdateStatus('DISPONIBLE')}
@@ -361,7 +361,7 @@ export default function DashboardPage({ userRole, userName }) {
                     Panne signalée avec succès !
                   </div>
                 ) : (
-                  <button 
+                  <button
                     onClick={handleSignalerPanne}
                     disabled={reporting}
                     className="btn btn-danger"

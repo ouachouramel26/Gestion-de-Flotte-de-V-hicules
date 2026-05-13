@@ -209,7 +209,10 @@ function MainLayout() {
             <RoleIcon size={14} /> {config.label}
           </div>
 
-          <div style={{ fontSize: '0.85rem', color: '#1e293b', fontWeight: 600 }}>
+          <div
+            data-testid="user-name"
+            style={{ fontSize: '0.85rem', color: '#1e293b', fontWeight: 600 }}
+          >
             {userName}
           </div>
           {userEmail && (
@@ -218,7 +221,11 @@ function MainLayout() {
             </div>
           )}
 
-          <button className="btn-logout" onClick={() => kc.logout()}>
+          <button
+            data-testid="logout-btn"
+            className="btn-logout"
+            onClick={() => kc.logout()}
+          >
             <LogOut size={16} /> Déconnexion
           </button>
         </div>

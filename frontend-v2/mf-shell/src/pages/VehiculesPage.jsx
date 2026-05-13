@@ -5,8 +5,8 @@ import StatusBadge from '../components/StatusBadge';
 import Modal from '../components/Modal';
 import { toast } from 'react-hot-toast';
 
-// URLs RÉELLES du backend Spring Boot
-const GRAPHQL_URL = 'http://localhost:4000/graphql';
+// URLs RÉELLES du backend (via proxy en dev, relatif en prod)
+const GRAPHQL_URL = '/graphql';
 
 export default function VehiculesPage() {
   const { keycloak } = useKeycloak();
@@ -65,7 +65,7 @@ export default function VehiculesPage() {
         if (json.data.vehicules) setVehicules(json.data.vehicules);
         if (json.data.conducteurs) setConducteurs(json.data.conducteurs);
       }
-    } catch (err) { 
+    } catch (err) {
       console.error('Fetch error:', err);
       toast.error(err.message);
     }
@@ -268,8 +268,8 @@ export default function VehiculesPage() {
                 });
 
                 if (!res.ok) {
-                    const errorData = await res.json().catch(() => ({}));
-                    throw new Error(errorData.errors?.[0]?.message || `Erreur serveur (${res.status})`);
+                  const errorData = await res.json().catch(() => ({}));
+                  throw new Error(errorData.errors?.[0]?.message || `Erreur serveur (${res.status})`);
                 }
 
                 const json = await res.json();

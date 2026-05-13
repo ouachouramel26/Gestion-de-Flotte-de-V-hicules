@@ -21,9 +21,16 @@ const PORT = process.env.PORT || 8084;
 
 
 // Initialisation des composants asynchrones
+// Initialisation des composants asynchrones avec retry pour Kafka
 const init = async () => {
-  await connectProducer();
-  startGrpcServer();
+  try {
+    await connectProducer();
+    console.log('Kafka Producer (Localisation) prêt');
+    startGrpcServer();
+  } catch (err) {
+    console.error('Erreur Kafka Producer (retry dans 5s):', err.message);
+    setTimeout(init, 5000);
+  }
 };
 init();
 

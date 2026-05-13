@@ -33,37 +33,37 @@ const ModalWrapper = ({ show, onClose, title, icon: Icon, children, error }) => 
 
 export default function MaintenancePage({ userRole }) {
   const { keycloak } = useKeycloak();
-  const [maintenances, setMaintenances]   = useState([]);
-  const [vehicules, setVehicules]         = useState([]);
-  const [techniciens, setTechniciens]     = useState([]);
-  const [myId, setMyId]                   = useState(null);
-  const [loading, setLoading]             = useState(true);
-  const [filterStatut, setFilterStatut]   = useState('');
-  const [search, setSearch]               = useState('');
-  const [error, setError]                 = useState('');
+  const [maintenances, setMaintenances] = useState([]);
+  const [vehicules, setVehicules] = useState([]);
+  const [techniciens, setTechniciens] = useState([]);
+  const [myId, setMyId] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [filterStatut, setFilterStatut] = useState('');
+  const [search, setSearch] = useState('');
+  const [error, setError] = useState('');
 
   // Modales
-  const [showCreate, setShowCreate]           = useState(false);
-  const [showPlanifier, setShowPlanifier]     = useState(false);
-  const [showDemarrer, setShowDemarrer]       = useState(false);
-  const [showCloturer, setShowCloturer]       = useState(false);
-  const [showAnnuler, setShowAnnuler]         = useState(false);
-  const [showHistorique, setShowHistorique]   = useState(false);
-  const [selectedItem, setSelectedItem]       = useState(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [showPlanifier, setShowPlanifier] = useState(false);
+  const [showDemarrer, setShowDemarrer] = useState(false);
+  const [showCloturer, setShowCloturer] = useState(false);
+  const [showAnnuler, setShowAnnuler] = useState(false);
+  const [showHistorique, setShowHistorique] = useState(false);
+  const [selectedItem, setSelectedItem] = useState(null);
 
   const [createForm, setCreateForm] = useState({
     vehiculeId: '', typeIntervention: 'REVISION', description: ''
   });
   const [planifierForm, setPlanifierForm] = useState({ datePlanifiee: '', technicienId: '' });
-  const [demarrerForm, setDemarrerForm]   = useState({ cout: 0 });
-  const [cloturerForm, setCloturerForm]   = useState({ compteRendu: '', cout: 0 });
-  const [annulerForm, setAnnulerForm]     = useState({ motif: '' });
+  const [demarrerForm, setDemarrerForm] = useState({ cout: 0 });
+  const [cloturerForm, setCloturerForm] = useState({ compteRendu: '', cout: 0 });
+  const [annulerForm, setAnnulerForm] = useState({ motif: '' });
   const [historiqueVehiculeId, setHistoriqueVehiculeId] = useState('');
-  const [historique, setHistorique]       = useState([]);
+  const [historique, setHistorique] = useState([]);
 
-  const isAdmin      = keycloak.hasRealmRole('admin');
+  const isAdmin = keycloak.hasRealmRole('admin');
   const isTechnicien = keycloak.hasRealmRole('technicien');
-  const canCreate    = isAdmin || isTechnicien;
+  const canCreate = isAdmin || isTechnicien;
 
   const headers = () => ({
     'Authorization': `Bearer ${keycloak.token}`,
@@ -105,17 +105,17 @@ export default function MaintenancePage({ userRole }) {
   useEffect(() => { fetchData(); }, [filterStatut, keycloak.token]);
 
   const getVehiclePlate = (id) => vehicules.find(v => v.id === id)?.plaque || id?.substring(0, 8) || '—';
-  const getTechName     = (id) => {
+  const getTechName = (id) => {
     const t = techniciens.find(x => x.id === id);
     return t ? `${t.prenom} ${t.nom}` : '—';
   };
 
   const statusMeta = {
-    SIGNALEE:     { badge: 'badge-danger',  label: 'Signalée',    color: '#dc2626' },
-    PLANIFIEE:    { badge: 'badge-info',    label: 'Planifiée',   color: '#2563eb' },
-    EN_COURS:     { badge: 'badge-warning', label: 'En cours',    color: '#d97706' },
-    TERMINEE:     { badge: 'badge-success', label: 'Terminée',    color: '#059669' },
-    ANNULEE:      { badge: 'badge-gray',    label: 'Annulée',     color: '#64748b' }
+    SIGNALEE: { badge: 'badge-danger', label: 'Signalée', color: '#dc2626' },
+    PLANIFIEE: { badge: 'badge-info', label: 'Planifiée', color: '#2563eb' },
+    EN_COURS: { badge: 'badge-warning', label: 'En cours', color: '#d97706' },
+    TERMINEE: { badge: 'badge-success', label: 'Terminée', color: '#059669' },
+    ANNULEE: { badge: 'badge-gray', label: 'Annulée', color: '#64748b' }
   };
 
   // ---- CRÉER une intervention ----
@@ -146,8 +146,8 @@ export default function MaintenancePage({ userRole }) {
       setCreateForm({ vehiculeId: '', typeIntervention: 'REVISION', description: '' });
       fetchData();
       toast.success('Maintenance signalée !');
-    } catch (err) { 
-      setError(err.message); 
+    } catch (err) {
+      setError(err.message);
       toast.error(err.message);
     }
   };
@@ -180,8 +180,8 @@ export default function MaintenancePage({ userRole }) {
       setShowPlanifier(false);
       fetchData();
       toast.success('Maintenance planifiée !');
-    } catch (err) { 
-      setError(err.message); 
+    } catch (err) {
+      setError(err.message);
       toast.error(err.message);
     }
   };
@@ -195,12 +195,12 @@ export default function MaintenancePage({ userRole }) {
       const res = await fetch(GRAPHQL_URL, {
         method: 'POST',
         headers: headers(),
-        body: JSON.stringify({ 
-          query, 
-          variables: { 
+        body: JSON.stringify({
+          query,
+          variables: {
             id: selectedItem.id,
             cout: parseFloat(demarrerForm.cout)
-          } 
+          }
         })
       });
       const json = await res.json();
@@ -209,8 +209,8 @@ export default function MaintenancePage({ userRole }) {
       setDemarrerForm({ cout: 0 });
       fetchData();
       toast.success('Travaux démarrés !');
-    } catch (err) { 
-      setError(err.message); 
+    } catch (err) {
+      setError(err.message);
       toast.error(err.message);
     }
   };
@@ -245,8 +245,8 @@ export default function MaintenancePage({ userRole }) {
       setCloturerForm({ compteRendu: '', cout: 0 });
       fetchData();
       toast.success('Maintenance clôturée !');
-    } catch (err) { 
-      setError(err.message); 
+    } catch (err) {
+      setError(err.message);
       toast.error(err.message);
     }
   };
@@ -271,8 +271,8 @@ export default function MaintenancePage({ userRole }) {
       setAnnulerForm({ motif: '' });
       fetchData();
       toast.success('Maintenance annulée');
-    } catch (err) { 
-      setError(err.message); 
+    } catch (err) {
+      setError(err.message);
       toast.error(err.message);
     }
   };
@@ -319,8 +319,8 @@ export default function MaintenancePage({ userRole }) {
 
     // 2. Filtre de recherche par plaque ou type
     const matchesSearch = getVehiclePlate(m.vehiculeId).toLowerCase().includes(search.toLowerCase()) ||
-                          m.typeIntervention?.toLowerCase().includes(search.toLowerCase());
-    
+      m.typeIntervention?.toLowerCase().includes(search.toLowerCase());
+
     return matchesSearch;
   });
 
@@ -525,9 +525,9 @@ export default function MaintenancePage({ userRole }) {
             <form onSubmit={handleDemarrer} style={{ marginTop: '1.5rem', textAlign: 'left' }}>
               <div className="form-group">
                 <label>Coût estimé (Optionnel)</label>
-                <input 
-                  type="number" 
-                  step="0.01" 
+                <input
+                  type="number"
+                  step="0.01"
                   placeholder="0.00"
                   value={demarrerForm.cout}
                   onChange={e => setDemarrerForm({ cout: e.target.value })}

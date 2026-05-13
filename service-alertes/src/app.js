@@ -21,7 +21,17 @@ app.use(express.json());
 const PORT = process.env.PORT || 3002;
 
 // Démarrer le consommateur Kafka
-runConsumer().catch(err => console.error('Erreur Kafka Consumer:', err));
+// Démarrer le consommateur Kafka avec retry
+const startKafka = async () => {
+  try {
+    await runConsumer();
+    console.log('Kafka Consumer (Alertes) connecté avec succès');
+  } catch (err) {
+    console.error('Erreur Kafka Consumer (retry dans 5s):', err.message);
+    setTimeout(startKafka, 5000);
+  }
+};
+startKafka();
 
 // --- ROUTES ---
 
@@ -90,7 +100,7 @@ app.get('/api/alertes/moi',
     try {
       const sub = req.user.sub;
       const isAdmin = req.userRoles.includes('admin');
-      
+
       let query = `
         SELECT 
           id, type_evenement as "typeEvenement", niveau, 
@@ -105,7 +115,7 @@ app.get('/api/alertes/moi',
       } else {
         query += "utilisateur_id = $1";
       }
-      
+
       query += " ORDER BY date_creation DESC";
       
       const result = await db.query(query, params);
@@ -125,7 +135,7 @@ app.patch('/api/alertes/:id/lire',
     try {
       const { id } = req.params;
       console.log(`[Alertes] Tentative de lecture de l'alerte ${id} par l'utilisateur ${req.user.sub}`);
-      
+
       const result = await db.query(
         `UPDATE alertes SET est_lu = true, date_lecture = NOW() 
          WHERE id = $1 
@@ -152,7 +162,7 @@ app.delete('/api/alertes/:id',
     try {
       const { id } = req.params;
       const result = await db.query('DELETE FROM alertes WHERE id = $1', [id]);
-      
+
       if (result.rowCount === 0) return res.status(404).json({ error: 'Alerte introuvable' });
       res.status(204).send();
     } catch (err) {

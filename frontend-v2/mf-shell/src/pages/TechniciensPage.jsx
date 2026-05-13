@@ -10,9 +10,9 @@ import { toast } from 'react-hot-toast';
 const GRAPHQL_URL = 'http://localhost:4000/graphql';
 
 const DISPO_META = {
-  DISPONIBLE: { badge: 'badge-success', label: 'Disponible',  color: '#059669' },
-  EN_INTERVENTION: { badge: 'badge-info',    label: 'En intervention',  color: '#2563eb' },
-  INDISPONIBLE: { badge: 'badge-danger',  label: 'Indisponible', color: '#dc2626' }
+  DISPONIBLE: { badge: 'badge-success', label: 'Disponible', color: '#059669' },
+  EN_INTERVENTION: { badge: 'badge-info', label: 'En intervention', color: '#2563eb' },
+  INDISPONIBLE: { badge: 'badge-danger', label: 'Indisponible', color: '#dc2626' }
 };
 
 export default function TechniciensPage() {
@@ -77,7 +77,7 @@ export default function TechniciensPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorVisible('');
-    
+
     try {
       const query = editItem ? `
         mutation($id: ID!, $prenom: String, $nom: String, $email: String, $telephone: String) {
@@ -100,19 +100,19 @@ export default function TechniciensPage() {
         headers: headers(),
         body: JSON.stringify({ query, variables })
       });
-      
+
       const json = await res.json();
       if (json.errors) {
         throw new Error(json.errors[0].message || 'Erreur de sauvegarde');
       }
-      
+
       setShowModal(false);
       setEditItem(null);
       resetForm();
       fetchData();
       toast.success(editItem ? 'Technicien modifié' : 'Technicien ajouté');
-    } catch (err) { 
-      toast.error(err.message); 
+    } catch (err) {
+      toast.error(err.message);
     }
   };
 
@@ -140,7 +140,7 @@ export default function TechniciensPage() {
 
   const resetForm = () => setForm({ nom: '', prenom: '', email: '', telephone: '', disponibilite: 'DISPONIBLE' });
 
-  const filtered = techniciens.filter(t => 
+  const filtered = techniciens.filter(t =>
     t.nom?.toLowerCase().includes(search.toLowerCase()) ||
     t.prenom?.toLowerCase().includes(search.toLowerCase()) ||
     t.email?.toLowerCase().includes(search.toLowerCase()) ||
@@ -162,7 +162,7 @@ export default function TechniciensPage() {
             <input placeholder="Nom, prénom, contact..." value={search} onChange={e => setSearch(e.target.value)} />
           </div>
           {isAdmin && (
-            <button className="btn btn-primary" style={{ background: '#d97706', borderColor: '#d97706' }} 
+            <button className="btn btn-primary" style={{ background: '#d97706', borderColor: '#d97706' }}
               onClick={() => { setEditItem(null); resetForm(); setShowModal(true); }}>
               <Plus size={16} /> Ajouter
             </button>
@@ -231,11 +231,11 @@ export default function TechniciensPage() {
             {errorVisible && <div style={{ color: 'red', marginBottom: '1rem' }}>{errorVisible}</div>}
             <form onSubmit={handleSubmit}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div className="form-group"><label>Nom</label><input required value={form.nom} onChange={e => setForm({...form, nom: e.target.value})} /></div>
-                <div className="form-group"><label>Prénom</label><input required value={form.prenom} onChange={e => setForm({...form, prenom: e.target.value})} /></div>
+                <div className="form-group"><label>Nom</label><input required value={form.nom} onChange={e => setForm({ ...form, nom: e.target.value })} /></div>
+                <div className="form-group"><label>Prénom</label><input required value={form.prenom} onChange={e => setForm({ ...form, prenom: e.target.value })} /></div>
               </div>
-              <div className="form-group"><label>Email</label><input type="email" required value={form.email} onChange={e => setForm({...form, email: e.target.value})} /></div>
-              <div className="form-group"><label>Téléphone</label><input value={form.telephone} onChange={e => setForm({...form, telephone: e.target.value})} /></div>
+              <div className="form-group"><label>Email</label><input type="email" required value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} /></div>
+              <div className="form-group"><label>Téléphone</label><input value={form.telephone} onChange={e => setForm({ ...form, telephone: e.target.value })} /></div>
               <div className="form-actions">
                 <button type="button" className="btn btn-cancel" onClick={() => setShowModal(false)}>Annuler</button>
                 <button type="submit" className="btn btn-primary" style={{ background: '#d97706' }}>Sauvegarder</button>

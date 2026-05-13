@@ -96,7 +96,7 @@ export default function LocalisationPage() {
         // 3. Fusionner avec les positions réelles ou générer des fallbacks
         const finalPositions = vehiclesInMission.map(v => {
           const realPos = locData.find(p => p.vehiculeId === v.id);
-          
+
           if (realPos) {
             return {
               ...realPos,
@@ -342,7 +342,7 @@ export default function LocalisationPage() {
                     <div style={{ fontWeight: 700 }}>{p.immatriculation}</div>
                     <div style={{ fontSize: '0.8rem' }}>{p.marque} {p.modele}</div>
                     <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#2563eb', marginTop: '4px' }}>
-                      <User size={12} style={{verticalAlign:'middle', marginRight:'2px'}}/> {p.conducteur}
+                      <User size={12} style={{ verticalAlign: 'middle', marginRight: '2px' }} /> {p.conducteur}
                     </div>
                     <div style={{ fontSize: '0.75rem', color: '#10b981' }}>Vitesse: {p.vitesse || 0} km/h</div>
                   </Popup>

@@ -16,6 +16,12 @@ export default defineConfig({
   server: {
     port: 3005,
     strictPort: true,
+    proxy: {
+      '/graphql': {
+        target: 'http://localhost:4000',
+        changeOrigin: true,
+      },
+    },
   },
   build: {
     target: "esnext",

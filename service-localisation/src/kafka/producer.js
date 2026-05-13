@@ -8,12 +8,8 @@ const kafka = new Kafka({
 const producer = kafka.producer();
 
 const connectProducer = async () => {
-  try {
-    await producer.connect();
-    console.log('Kafka Producer (Localisation) connecté');
-  } catch (err) {
-    console.error('Erreur connexion Kafka Producer:', err);
-  }
+  await producer.connect();
+  console.log('Kafka Producer (Localisation) connecté');
 };
 
 const sendGeofenceAlert = async (vehiculeId, typeZone, message) => {

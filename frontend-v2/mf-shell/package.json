@@ -23,6 +23,8 @@
     "@types/react": "^18.2.15",
     "@types/react-dom": "^18.2.7",
     "@vitejs/plugin-react": "^4.0.3",
+    "cypress": "^15.14.2",
+    "cypress-mochawesome-reporter": "^3.8.4",
     "vite": "^4.4.5"
   }
 }

@@ -10,12 +10,22 @@ const jwksClient = require('jwks-rsa');
 const typeDefs = gql(fs.readFileSync(path.join(__dirname, '../graphQL/schema.graphql'), 'utf8'));
 
 // 2. Configuration Keycloak (JWKS)
+const jwksUri = process.env.KEYCLOAK_JWKS_URI || `${process.env.KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM || 'sgfv'}/protocol/openid-connect/certs`;
+console.log(`[Gateway] Using JWKS URI: ${jwksUri}`);
+
 const client = jwksClient({
-  jwksUri: `${process.env.KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM}/protocol/openid-connect/certs`
+  jwksUri: jwksUri,
+  cache: true,
+  rateLimit: true
 });
 
 function getKey(header, callback) {
   client.getSigningKey(header.kid, (err, key) => {
+    if (err || !key) {
+      console.error('[Gateway] Erreur JWKS (clé introuvable ou invalide):', err ? err.message : 'Pas de clé');
+      callback(err || new Error('Clé invalide'));
+      return;
+    }
     const signingKey = key.publicKey || key.rsaPublicKey;
     callback(null, signingKey);
   });
@@ -46,7 +56,7 @@ async function getAdminToken() {
   params.append('grant_type', 'password');
 
   const res = await axios.post(`${process.env.KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM}/protocol/openid-connect/token`, params, {
-    headers: { 
+    headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
       'Host': 'localhost:8180'
     }
@@ -117,26 +127,26 @@ const resolvers = {
         try {
           const res = await services.maintenance.get('/api/v1/techniciens/me', { headers: { Authorization: authHeader } });
           if (res.data) return res.data;
-        } catch (e) {}
+        } catch (e) { }
       }
-      
+
       if (roles.includes('conducteur')) {
         try {
           const res = await services.conducteurs.get('/api/v1/conducteurs/me', { headers: { Authorization: authHeader } });
           if (res.data) return res.data;
-        } catch (e) {}
+        } catch (e) { }
       }
 
       // Si on n'a rien trouvé avec les rôles, on essaie quand même les deux au cas où (fallback)
       try {
         const res = await services.maintenance.get('/api/v1/techniciens/me', { headers: { Authorization: authHeader } });
         if (res.data) return res.data;
-      } catch (e) {}
+      } catch (e) { }
 
       try {
         const res = await services.conducteurs.get('/api/v1/conducteurs/me', { headers: { Authorization: authHeader } });
         if (res.data) return res.data;
-      } catch (e) {}
+      } catch (e) { }
 
       return null;
     },
@@ -245,7 +255,13 @@ const resolvers = {
         const res = await services.localisation.get('/api/v1/zones', {
           headers: { Authorization: authHeader }
         });
-        return res.data || [];
+        const zones = extractData(res.data);
+        return zones.map(z => ({
+          ...z,
+          latitudeCentre: z.latitudeCentre ?? 48.8566,
+          longitudeCentre: z.longitudeCentre ?? 2.3522,
+          rayonMetres: z.rayonMetres ?? 500
+        }));
       } catch (err) {
         console.error(`[Gateway] Error fetching zones: ${err.message}`);
         return [];
@@ -257,7 +273,15 @@ const resolvers = {
         params: { limit: 1 },
         headers: { Authorization: authHeader }
       });
-      return res.data.length > 0 ? res.data[0] : null;
+      if (res.data && res.data.length > 0) {
+        const p = res.data[0];
+        return {
+          ...p,
+          vitesse: p.vitesse ?? 0,
+          direction: p.direction ?? 0
+        };
+      }
+      return null;
     },
     positionsActuelles: async (_, __, { token }) => {
       try {
@@ -265,10 +289,12 @@ const resolvers = {
         const res = await services.localisation.get('/api/v1/vehicules', {
           headers: { Authorization: authHeader }
         });
-        // Mapper "id" du microservice vers "vehiculeId" attendu par GraphQL
-        return (res.data || []).map(p => ({
+        const data = extractData(res.data);
+        return data.map(p => ({
           ...p,
-          vehiculeId: p.id
+          vehiculeId: p.id || p.vehiculeId,
+          vitesse: p.vitesse ?? 0,
+          direction: p.direction ?? 0
         }));
       } catch (err) {
         console.error(`[Gateway] Error fetching positionsActuelles: ${err.message}`);
@@ -376,7 +402,7 @@ const resolvers = {
     assignerConducteur: async (_, { vehiculeId, conducteurId }, { token }) => {
       try {
         const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
-        
+
         // 1. Appeler le service Conducteurs pour créer l'assignation officielle
         // Ce service publiera un événement Kafka que le service Véhicules et le service Alertes écouteront.
         await services.conducteurs.post('/api/v1/assignations', { vehiculeId, conducteurId }, {
@@ -477,7 +503,7 @@ const resolvers = {
       const res = await services.maintenance.post('/api/v1/maintenances', args, {
         headers: { Authorization: authHeader }
       });
-      
+
       // Orchestration : Mise à jour automatique du statut du véhicule
       try {
         const adminToken = await getAdminToken();
@@ -651,11 +677,11 @@ const server = new ApolloServer({
   },
   formatError: (err) => {
     console.error('[Gateway] GraphQL Error:', err.message);
-    
+
     // Si c'est une erreur propagée par nos catch blocks (new Error(err.response?.data?.message || err.message))
     // On essaie de voir si c'est un message JSON Stringifié ou juste du texte
     let message = err.message;
-    
+
     // Détection des erreurs Axios non catchées proprement
     if (err.extensions && err.extensions.exception && err.extensions.exception.isAxiosError) {
       const axiosErr = err.extensions.exception;
