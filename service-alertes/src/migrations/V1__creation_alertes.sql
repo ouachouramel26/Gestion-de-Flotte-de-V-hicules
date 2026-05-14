@@ -59,7 +59,10 @@ CREATE TABLE alertes (
         'MAINTENANCE_TERMINEE',
         'PANNE_SIGNALEE',
         'SORTIE_ZONE',
-        'VITESSE_EXCESSIVE'
+        'VITESSE_EXCESSIVE',
+        'VEHICULE_CREE',
+        'MAINTENANCE_DEBUTEE',
+        'MAINTENANCE_ANNULEE'
     )),
     CONSTRAINT chk_alertes_niveau CHECK (niveau IN (
         'INFO', 'AVERTISSEMENT', 'CRITIQUE', 'URGENCE'

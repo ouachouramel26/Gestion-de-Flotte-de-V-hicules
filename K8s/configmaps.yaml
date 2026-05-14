@@ -2209,6 +2209,8 @@ data:
       PANNE_SIGNALEE
       SORTIE_ZONE
       VITESSE_EXCESSIVE
+      VEHICULE_CREE
+      MAINTENANCE_ANNULEE
     }
     
     enum RoleDestinataire {

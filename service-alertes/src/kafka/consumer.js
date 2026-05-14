@@ -63,9 +63,21 @@ async function alertExists(vehiculeId, typeEvenement, roleDest) {
   }
 }
 
+async function getUserName(keycloakId) {
+  try {
+    const res = await db.query('SELECT prenom, nom FROM utilisateurs_cache WHERE keycloak_id = $1', [keycloakId]);
+    if (res.rows.length > 0) {
+      return `${res.rows[0].prenom} ${res.rows[0].nom}`;
+    }
+    return keycloakId;
+  } catch (err) {
+    return keycloakId;
+  }
+}
+
 const runConsumer = async () => {
   await consumer.connect();
-  await consumer.subscribe({ topics: ['conducteurs', 'maintenance', 'vehicules', 'localisation-events'], fromBeginning: false });
+  await consumer.subscribe({ topics: ['conducteurs', 'maintenance', 'vehicules', 'localisation-events'], fromBeginning: true });
 
   await consumer.run({
     eachMessage: async ({ topic, message }) => {
@@ -98,10 +110,11 @@ const runConsumer = async () => {
         // Alerte pour changement de statut
         if (topic === 'vehicules' && payload.event === 'vehicule.status.changed') {
            const nouveauStatut = payload.statut_nouveau || payload.statut;
-           const niveau = nouveauStatut === 'EN_PANNE' ? 'AVERTISSEMENT' : 'INFO';
-           await insertAlerte('STATUT_CHANGE', niveau, 'ADMIN', null, vId, vPlaque, `Le véhicule ${vPlaque || vId} est passé en statut : ${nouveauStatut}`);
-           if (driverId) {
-             await insertAlerte('STATUT_CHANGE', niveau, 'CONDUCTEUR', driverId, vId, vPlaque, `Le statut de votre véhicule ${vPlaque || vId} a été mis à jour : ${nouveauStatut}`);
+           if (nouveauStatut === 'EN_PANNE') {
+             await insertAlerte('PANNE_SIGNALEE', 'AVERTISSEMENT', 'ADMIN', null, vId, vPlaque, `Le véhicule ${vPlaque || vId} est passé en panne.`);
+             if (driverId) {
+               await insertAlerte('PANNE_SIGNALEE', 'AVERTISSEMENT', 'CONDUCTEUR', driverId, vId, vPlaque, `Votre véhicule ${vPlaque || vId} est signalé en panne.`);
+             }
            }
         }
 
@@ -124,8 +137,9 @@ const runConsumer = async () => {
             // Alerte uniquement pour le topic 'conducteurs' pour éviter les doublons
             if (topic === 'conducteurs') {
               const plaqueLabel = vPlaque || await getPlaque(vId) || vId;
+              const driverName = await getUserName(keycloakId);
               await insertAlerte('VEHICULE_ASSIGNE', 'INFO', 'CONDUCTEUR', keycloakId, vId, plaqueLabel, `Le véhicule ${plaqueLabel} vous a été assigné.`);
-              await insertAlerte('VEHICULE_ASSIGNE', 'INFO', 'ADMIN', null, vId, plaqueLabel, `Le véhicule ${plaqueLabel} a été assigné au conducteur ${keycloakId}.`);
+              await insertAlerte('VEHICULE_ASSIGNE', 'INFO', 'ADMIN', null, vId, plaqueLabel, `Le véhicule ${plaqueLabel} a été assigné au conducteur ${driverName}.`);
             }
           }
         }
