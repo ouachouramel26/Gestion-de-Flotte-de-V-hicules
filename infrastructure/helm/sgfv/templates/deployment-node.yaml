@@ -6,7 +6,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ if eq $name "gateway" }}api-gateway{{ else }}service-{{ $name }}{{ end }}
-  namespace: {{ $.Values.global.namespace }}
+  namespace: {{ $.Release.Namespace }}
   labels:
     app: {{ if eq $name "gateway" }}api-gateway{{ else }}service-{{ $name }}{{ end }}
 spec:

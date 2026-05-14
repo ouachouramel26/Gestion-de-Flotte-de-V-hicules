@@ -6,7 +6,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: service-{{ $name }}
-  namespace: {{ $.Values.global.namespace }}
+  namespace: {{ $.Release.Namespace }}
   labels:
     app: service-{{ $name }}
 spec:

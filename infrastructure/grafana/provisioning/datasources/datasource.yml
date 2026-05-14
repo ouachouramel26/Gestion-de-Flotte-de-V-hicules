@@ -1,7 +1,7 @@
 apiVersion: 1
 
 datasources:
-  - name: Prometheus
+  - name: SGFV-Prometheus
     type: prometheus
     uid: prometheus
     url: http://prometheus-server:80

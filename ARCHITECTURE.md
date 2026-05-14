@@ -58,18 +58,30 @@ L'application Front est découpée en deux builds distincts :
 - Le `mf-shell` est l'hôte (port 3000).
 - Le `mf-carte` est le remote (port 3001) qui expose son propre composant de carte.
 
-### 3. gRPC & Streaming
-Utilisé pour le **Service Localisation** afin de minimiser la latence et utiliser un format binaire (Protobuf) pour les positions GPS massives.
+### 4. TimescaleDB (Time-Series Storage)
+Pour le tracking GPS, une base PostgreSQL classique atteindrait ses limites de performance. Nous utilisons **TimescaleDB** qui permet :
+- **Hypertables** : Partitionnement automatique par temps.
+- **Indexation spatiale (PostGIS)** : Requêtes géographiques ultra-rapides pour le Geofencing.
+- **Compression** : Réduction de l'empreinte disque pour l'historique massif.
 
 ### 5. Observabilité & Monitoring
-Le système intègre une stack d'observabilité complète :
-- **Prometheus** : Collecte des métriques techniques (JVM, Node.js) et business via Actuator et `prom-client`.
-- **Jaeger** : Tracing distribué via OpenTelemetry pour suivre le cheminement des requêtes entre les microservices.
-- **Grafana** : Dashboards personnalisés pour la visualisation en temps réel.
-- **Alertmanager** : Gestion des alertes critiques (services down, latence élevée).
+Le système intègre une stack d'observabilité complète (Standard OpenTelemetry) :
+- **Traces** : Suivi du parcours d'une requête du frontend jusqu'à la base de données via **Jaeger**.
+- **Métriques** : Collecte des indicateurs de santé (latence, erreurs, CPU) via **Prometheus**.
+- **Visualisation** : Dashboards **Grafana** pour une vue d'ensemble en temps réel.
+- **Logs** : Agrégation centralisée pour faciliter le debugging distribué.
 
 ---
+
+## 🛠️ Schéma de Données (Concepts)
+
+1. **Véhicules** : Stockage relationnel (PostgreSQL).
+2. **Positions** : Séries temporelles (TimescaleDB).
+3. **Alertes** : Stockage persistant des événements Kafka critiques.
+
+---
+
 # ─────────────────────────────────────────────────
 # Décisions d'Architecture (ADR)
 # ─────────────────────────────────────────────────
-*Projet Master SGFV 2026*
+*Retrouvez le détail des choix techniques dans le dossier `/docs/adr/`.*

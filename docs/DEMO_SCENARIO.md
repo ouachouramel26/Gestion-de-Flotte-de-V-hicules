@@ -1,4 +1,4 @@
-# Scénario de Démonstration — SGFV 🎬
+# Scénario de Démonstration — SGFV 
 
 Ce document guide la présentation du système SGFV étape par étape.
 
@@ -11,12 +11,12 @@ Ce document guide la présentation du système SGFV étape par étape.
 - Se connecter avec le compte `admin` / `admin123`.
 - Montrer la redirection sécurisée vers Keycloak.
 
-## 3. Gestion du Parc (Service Véhicules) 🚗
+## 3. Gestion du Parc (Service Véhicules) 
 - Naviguer vers **"Parc Automobile"**.
 - Créer un nouveau véhicule (Plaque, Marque, Modèle).
 - Vérifier que le véhicule apparaît dans la liste avec le statut `DISPONIBLE`.
 
-## 4. Tracking Temps Réel (Service Localisation) 🛰️
+## 4. Tracking Temps Réel (Service Localisation) 
 - Naviguer vers **"Géo-Localisation"**.
 - Activer la simulation de mouvement via le script : `node scripts/full_fleet_simulation.js`.
 - Observer le véhicule bouger en temps réel sur la carte Leaflet.

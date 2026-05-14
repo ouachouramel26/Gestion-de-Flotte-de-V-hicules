@@ -13,27 +13,14 @@ export const options = {
   },
 };
 
-const BASE_URL = 'http://localhost:4000/graphql'; // Assuming Gateway is at 4000
+const BASE_URL = 'http://localhost:4000/health'; 
 
 export default function () {
-  // Simulate a driver getting their alerts
-  const query = `
-    query {
-      alertes {
-        id
-        message
-        niveau
-      }
-    }
-  `;
-
-  const res = http.post(BASE_URL, JSON.stringify({ query }), {
-    headers: { 'Content-Type': 'application/json' },
-  });
+  const res = http.get(BASE_URL);
 
   check(res, {
     'is status 200': (r) => r.status === 200,
-    'has data': (r) => r.json().data !== undefined,
+    'status is UP': (r) => r.json().status === 'UP',
   });
 
   sleep(1);

@@ -73,17 +73,38 @@ Accès : `http://localhost:3000` (Login Keycloak requis)
 
 ---
 
-## 📖 Livrables de Spécialisation (Semaine 7)
+## 📖 Documentation Complète
 
-Pour répondre aux exigences de haute disponibilité et de maintenance industrielle, les livrables suivants ont été ajoutés :
+Le projet est documenté en profondeur pour faciliter la maintenance et l'évolution :
 
-1. **Observabilité Avancée** (`/infrastructure`) :
-   - Dashboards Grafana pré-configurés (JSON).
-   - Provisioning Prometheus et OpenTelemetry Collector.
-2. **Décisions d'Architecture** (`/docs/adr`) :
-   - Justification de l'usage de Kafka vs RabbitMQ.
-   - Justification du streaming gRPC.
-3. **Validation de Charge** (`/scripts`) :
-   - Test de montée en charge progressive via k6.
+### 🚀 Démarrage & Utilisation
+- **[Guide de Lancement (Docker/K8s)](docs/GUIDE_LANCEMENT.md)**
+- **[Guide Utilisateur (Fonctionnel)](docs/GUIDE_UTILISATEUR.md)**
+- **[Comptes & Accès](docs/COMPTES.md)**
+
+### 🏗️ Architecture & Technique
+- **[Architecture Globale](ARCHITECTURE.md)**
+- **[Décisions d'Architecture (ADR)](docs/adr/)**
+- **[Sécurité & Keycloak](docs/keycloak/README.md)**
+- **[Observabilité & Monitoring](infrastructure/README.md)**
+
+### 📦 Micro-Services (READMEs individuels)
+- [Service Véhicules](service-vehicules/README.md)
+- [Service Conducteurs](service-conducteurs/README.md)
+- [Service Maintenance](service-maintenance/README.md)
+- [Service Localisation](service-localisation/README.md)
+- [Service Alertes](service-alertes/README.md)
+- [API Gateway](api/README.md)
+- [Frontend React](frontend-v2/README.md)
 
 ---
+
+## 🏆 Points Forts du Projet
+- **Consistance Event-Driven** : Utilisation de Kafka pour synchroniser les états entre services.
+- **Micro-Frontend Architecture** : Découpage réel de l'UI pour une scalabilité maximale.
+- **Observabilité Standardisée** : Tracing distribué intégré via OpenTelemetry.
+- **Tests de Charge** : Simulation via k6 pour valider la robustesse.
+- **Déploiement K8s** : Manifestes complets pour une mise en production simulée.
+
+---
+*Projet Master 1 GIL - Université de Rouen - 2026*
