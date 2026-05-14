@@ -1,6 +1,8 @@
+// require('./otel');
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const promClient = require('prom-client');
 
 const db = require('./config/db');
 const { runConsumer } = require('./kafka/consumer');
@@ -8,7 +10,22 @@ const { authenticate, authorize } = require('./middleware/auth');
 
 const app = express();
 
-// CORS pour le frontend
+// --- METRICS (EN PREMIER) ---
+const register = new promClient.Registry();
+promClient.collectDefaultMetrics({ register });
+
+app.get('/metrics', async (req, res) => {
+  console.log(`[Alertes Metrics] Scraping request from ${req.ip}`);
+  res.set('Content-Type', register.contentType);
+  res.end(await register.metrics());
+});
+
+// Health check public
+app.get('/health', (req, res) => {
+  res.json({ status: 'UP', service: 'service-alertes' });
+});
+
+// --- MIDDLEWARES ---
 app.use(cors({
   origin: ['http://localhost:3000', 'http://localhost:3005'],
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -107,7 +124,7 @@ app.get('/api/alertes/moi',
           role_destinataire as "roleDestinataire", vehicule_id as "vehiculeId", 
           message, est_lu as "estLu", plaque, date_creation as "dateCreation" 
         FROM alertes WHERE `;
-      
+
       const params = [sub];
       // On voit ses alertes perso (utilisateur_id) OU les alertes destinées à son rôle Admin
       if (isAdmin) {
@@ -117,7 +134,7 @@ app.get('/api/alertes/moi',
       }
 
       query += " ORDER BY date_creation DESC";
-      
+
       const result = await db.query(query, params);
       res.json(result.rows);
     } catch (err) {

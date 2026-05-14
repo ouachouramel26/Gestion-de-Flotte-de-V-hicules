@@ -15,6 +15,10 @@ spec:
       app: service-vehicules
   template:
     metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/actuator/prometheus"
+        prometheus.io/port: "8081"
       labels:
         app: service-vehicules
     spec:
@@ -93,6 +97,10 @@ spec:
       app: service-conducteurs
   template:
     metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/actuator/prometheus"
+        prometheus.io/port: "8082"
       labels:
         app: service-conducteurs
     spec:
@@ -168,6 +176,10 @@ spec:
       app: service-maintenance
   template:
     metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/actuator/prometheus"
+        prometheus.io/port: "8083"
       labels:
         app: service-maintenance
     spec:
@@ -243,6 +255,10 @@ spec:
       app: service-localisation
   template:
     metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "8084"
       labels:
         app: service-localisation
     spec:
@@ -259,6 +275,12 @@ spec:
           env:
             - name: DATABASE_URL
               value: "postgresql://sgfv:sgfv_secret@postgres-localisation:5432/localisation_db?sslmode=no-verify"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector:4317"
+            - name: OTEL_TRACES_EXPORTER
+              value: "otlp"
+            - name: OTEL_METRICS_EXPORTER
+              value: "otlp"
           resources:
             requests:
               memory: "128Mi"
@@ -306,6 +328,10 @@ spec:
       app: service-alertes
   template:
     metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "3002"
       labels:
         app: service-alertes
     spec:
@@ -318,6 +344,7 @@ spec:
           envFrom:
             - configMapRef:
                 name: config-alertes
+          env:
           resources:
             requests:
               memory: "128Mi"
@@ -373,6 +400,10 @@ spec:
       app: api-gateway
   template:
     metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "4000"
       labels:
         app: api-gateway
     spec:
@@ -403,6 +434,10 @@ spec:
               value: "sgfv"
             - name: KEYCLOAK_JWKS_URI
               value: "http://keycloak:8080/realms/sgfv/protocol/openid-connect/certs"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector:4317"
+            - name: OTEL_TRACES_EXPORTER
+              value: "otlp"
           resources:
             requests:
               memory: "128Mi"

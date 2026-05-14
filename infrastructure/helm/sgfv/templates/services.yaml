@@ -1,0 +1,23 @@
+{{- range $name, $config := .Values.services }}
+{{- if $config.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-{{ $name }}
+  namespace: {{ $.Values.global.namespace }}
+spec:
+  selector:
+    app: service-{{ $name }}
+  ports:
+    - port: {{ $config.port }}
+      targetPort: {{ $config.port }}
+      {{- if eq $name "localisation" }}
+      name: rest
+    - port: 3001
+      targetPort: 3001
+      name: grpc
+      {{- end }}
+  type: ClusterIP
+{{- end }}
+{{- end }}

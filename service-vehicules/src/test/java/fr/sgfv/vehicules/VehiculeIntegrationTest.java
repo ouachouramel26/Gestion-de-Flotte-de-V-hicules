@@ -163,9 +163,9 @@ public class VehiculeIntegrationTest {
 
         // 1. CONDUCTEUR ASSIGNED
         Map<String, Object> eventAssigned = new HashMap<>();
-        eventAssigned.put("event", "conducteur.assigned");
-        eventAssigned.put("vehicule_id", vehiculeId.toString());
-        eventAssigned.put("conducteur_id", conducteurId.toString());
+        eventAssigned.put("eventType", "CONDUCTEUR_ASSIGNED");
+        eventAssigned.put("vehiculeId", vehiculeId.toString());
+        eventAssigned.put("conducteurId", conducteurId.toString());
 
         kafkaTemplate.send("conducteurs", vehiculeId.toString(), eventAssigned);
         waitForCondition(() -> conducteurId.equals(vehiculeRepository.findById(vehiculeId).get().getConducteurAssigneId()));
@@ -173,8 +173,8 @@ public class VehiculeIntegrationTest {
 
         // 2. CONDUCTEUR UNASSIGNED
         Map<String, Object> eventUnassigned = new HashMap<>();
-        eventUnassigned.put("event", "conducteur.unassigned");
-        eventUnassigned.put("vehicule_id", vehiculeId.toString());
+        eventUnassigned.put("eventType", "CONDUCTEUR_UNASSIGNED");
+        eventUnassigned.put("vehiculeId", vehiculeId.toString());
 
         kafkaTemplate.send("conducteurs", vehiculeId.toString(), eventUnassigned);
         waitForCondition(() -> vehiculeRepository.findById(vehiculeId).get().getConducteurAssigneId() == null);
@@ -186,7 +186,7 @@ public class VehiculeIntegrationTest {
         vehiculeRepository.save(v);
 
         Map<String, Object> eventDeactivated = new HashMap<>();
-        eventDeactivated.put("event", "conducteur.deactivated");
+        eventDeactivated.put("eventType", "CONDUCTEUR_DEACTIVATED");
         eventDeactivated.put("vehicule_assigne_id", vehiculeId.toString());
 
         kafkaTemplate.send("conducteurs", vehiculeId.toString(), eventDeactivated);

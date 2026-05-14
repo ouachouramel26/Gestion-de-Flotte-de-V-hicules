@@ -5,6 +5,8 @@ import fr.sgfv.vehicules.entity.Vehicule;
 import fr.sgfv.vehicules.exception.*;
 import fr.sgfv.vehicules.kafka.VehiculeKafkaProducer;
 import fr.sgfv.vehicules.repository.VehiculeRepository;
+import io.micrometer.observation.annotation.Observed;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,10 +15,12 @@ import java.util.*;
 
 @Service
 @RequiredArgsConstructor
+@Observed(name = "vehicule.service")
 public class VehiculeService {
 
     private final VehiculeRepository vehiculeRepository;
     private final VehiculeKafkaProducer kafkaProducer;
+    private final MeterRegistry meterRegistry;
 
     private static final Map<String, List<String>> TRANSITIONS = Map.of(
         "DISPONIBLE",     List.of("EN_MISSION", "EN_MAINTENANCE", "EN_PANNE"),
@@ -58,6 +62,10 @@ public class VehiculeService {
             .statut("DISPONIBLE")
             .build();
         Vehicule saved = vehiculeRepository.save(vehicule);
+        
+        // Métrique personnalisée
+        meterRegistry.counter("sgfv.vehicules.created.total").increment();
+        
         kafkaProducer.envoyerVehiculeCreated(saved);
         return toDTO(saved);
     }

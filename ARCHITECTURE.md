@@ -61,8 +61,15 @@ L'application Front est découpée en deux builds distincts :
 ### 3. gRPC & Streaming
 Utilisé pour le **Service Localisation** afin de minimiser la latence et utiliser un format binaire (Protobuf) pour les positions GPS massives.
 
-### 4. TimescaleDB (S5)
-La base de données de localisation utilise des extensions de séries temporelles pour optimiser les requêtes sur l'historique des trajets.
+### 5. Observabilité & Monitoring
+Le système intègre une stack d'observabilité complète :
+- **Prometheus** : Collecte des métriques techniques (JVM, Node.js) et business via Actuator et `prom-client`.
+- **Jaeger** : Tracing distribué via OpenTelemetry pour suivre le cheminement des requêtes entre les microservices.
+- **Grafana** : Dashboards personnalisés pour la visualisation en temps réel.
+- **Alertmanager** : Gestion des alertes critiques (services down, latence élevée).
 
 ---
+# ─────────────────────────────────────────────────
+# Décisions d'Architecture (ADR)
+# ─────────────────────────────────────────────────
 *Projet Master SGFV 2026*

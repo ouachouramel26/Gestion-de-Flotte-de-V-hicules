@@ -1,0 +1,26 @@
+global:
+  keycloak:
+    url: "https://auth.sgfv.com" # Prod URL
+
+services:
+  vehicules:
+    replicas: 3 # High availability
+    resources:
+      limits:
+        memory: "1Gi"
+        cpu: "1000m"
+
+  conducteurs:
+    replicas: 2
+  
+  maintenance:
+    replicas: 2
+
+  localisation:
+    replicas: 2
+
+  alertes:
+    replicas: 2
+
+  gateway:
+    replicas: 3

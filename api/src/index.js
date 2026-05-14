@@ -1,10 +1,16 @@
+require('./otel');
 require('dotenv').config();
-const { ApolloServer, gql } = require('apollo-server');
+const { ApolloServer, gql } = require('apollo-server-express');
+const express = require('express');
+const { register, collectDefaultMetrics } = require('prom-client');
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
 const jwt = require('jsonwebtoken');
 const jwksClient = require('jwks-rsa');
+
+// Activation des métriques par défaut (CPU, RAM, etc.)
+collectDefaultMetrics();
 
 // 1. Charger le schéma GraphQL
 const typeDefs = gql(fs.readFileSync(path.join(__dirname, '../graphQL/schema.graphql'), 'utf8'));
@@ -656,61 +662,65 @@ const resolvers = {
   }
 };
 
-// 5. Initialisation du serveur
-const server = new ApolloServer({
-  typeDefs,
-  resolvers,
-  csrfPrevention: true,
-  cache: 'bounded',
-  cors: {
-    origin: ["https://studio.apollographql.com", "http://localhost:4000", "http://localhost:3000", "http://localhost:3005", "http://127.0.0.1:4000", "http://127.0.0.1:3005"],
-    credentials: true
-  },
-  context: async ({ req }) => {
-    console.log(`[Gateway] Incoming request: ${req.method} ${req.body?.operationName || ''}`);
-    const token = req.headers.authorization || '';
-    if (token) {
-      try {
-        const decoded = await new Promise((resolve, reject) => {
-          jwt.verify(token.replace('Bearer ', ''), getKey, {
-            algorithms: ['RS256']
-          }, (err, decoded) => {
-            if (err) reject(err);
-            resolve(decoded);
+// 5. Initialisation du serveur Express et Apollo
+async function startServer() {
+  const app = express();
+  
+  const server = new ApolloServer({
+    typeDefs,
+    resolvers,
+    csrfPrevention: true,
+    cache: 'bounded',
+    context: async ({ req }) => {
+      console.log(`[Gateway] Incoming request: ${req.method} ${req.body?.operationName || ''}`);
+      const token = req.headers.authorization || '';
+      if (token) {
+        try {
+          const decoded = await new Promise((resolve, reject) => {
+            jwt.verify(token.replace('Bearer ', ''), getKey, {
+              algorithms: ['RS256']
+            }, (err, decoded) => {
+              if (err) reject(err);
+              resolve(decoded);
+            });
           });
-        });
-        console.log(`[Gateway] Token valid for user: ${decoded.preferred_username || decoded.sub}`);
-        return { user: decoded, token };
-      } catch (e) {
-        console.error('[Gateway] Erreur de validation du token:', e.message);
+          console.log(`[Gateway] Token valid for user: ${decoded.preferred_username || decoded.sub}`);
+          return { user: decoded, token };
+        } catch (e) {
+          console.error('[Gateway] Erreur de validation du token:', e.message);
+        }
       }
-    } else {
-      console.warn('[Gateway] No authorization header found');
+      return { token: '' };
+    },
+  });
+
+  await server.start();
+  server.applyMiddleware({ app, path: '/graphql' });
+
+  // Endpoint pour Prometheus
+  app.get('/metrics', async (req, res) => {
+    console.log(`[Metrics] Scraping request from ${req.ip}`);
+    try {
+      res.set('Content-Type', register.contentType);
+      res.end(await register.metrics());
+    } catch (ex) {
+      console.error('[Metrics] Error generating metrics:', ex);
+      res.status(500).end(ex);
     }
-    return { token: '' };
-  },
-  formatError: (err) => {
-    console.error('[Gateway] GraphQL Error:', err.message);
+  });
 
-    // Si c'est une erreur propagée par nos catch blocks (new Error(err.response?.data?.message || err.message))
-    // On essaie de voir si c'est un message JSON Stringifié ou juste du texte
-    let message = err.message;
+  // Health check simple
+  app.get('/health', (req, res) => {
+    res.json({ status: 'UP' });
+  });
 
-    // Détection des erreurs Axios non catchées proprement
-    if (err.extensions && err.extensions.exception && err.extensions.exception.isAxiosError) {
-      const axiosErr = err.extensions.exception;
-      message = axiosErr.response?.data?.message || axiosErr.message;
-    }
+  const PORT = process.env.PORT || 4000;
+  app.listen(PORT, () => {
+    console.log(`🚀 Gateway ready at http://localhost:${PORT}${server.graphqlPath}`);
+    console.log(`📊 Metrics available at http://localhost:${PORT}/metrics`);
+  });
+}
 
-    return {
-      message: message,
-      path: err.path,
-      code: err.extensions?.code || 'INTERNAL_SERVER_ERROR'
-    };
-  },
-});
-
-const PORT = process.env.PORT || 4000;
-server.listen({ port: PORT }).then(({ url }) => {
-  console.log(`🚀 Gateway Apollo prêt sur ${url}`);
+startServer().catch(err => {
+  console.error('Failed to start server:', err);
 });

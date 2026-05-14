@@ -1,5 +1,7 @@
+require('./otel');
 require('dotenv').config();
 const express = require('express');
+const promClient = require('prom-client');
 
 const db = require('./config/db');
 const { startGrpcServer } = require('./grpc/server');
@@ -7,6 +9,15 @@ const { connectProducer } = require('./kafka/producer');
 
 const app = express();
 app.use(express.json());
+
+// --- METRICS ---
+const register = new promClient.Registry();
+promClient.collectDefaultMetrics({ register });
+
+app.get('/metrics', async (req, res) => {
+  res.set('Content-Type', register.contentType);
+  res.end(await register.metrics());
+});
 
 // CORS — autorise le frontend à appeler ce service
 app.use((req, res, next) => {

@@ -1,0 +1,91 @@
+global:
+  namespace: sgfv
+  imagePullPolicy: IfNotPresent
+  keycloak:
+    url: "http://keycloak:8080"
+    realm: "sgfv"
+
+services:
+  vehicules:
+    enabled: true
+    image: gestion_vehicules-service-vehicules
+    tag: latest
+    port: 8081
+    replicas: 1
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "250m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+  
+  conducteurs:
+    enabled: true
+    image: gestion_vehicules-service-conducteurs
+    tag: latest
+    port: 8082
+    replicas: 1
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "250m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+
+  maintenance:
+    enabled: true
+    image: gestion_vehicules-service-maintenance
+    tag: latest
+    port: 8083
+    replicas: 1
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "250m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+
+  localisation:
+    enabled: true
+    image: gestion_vehicules-service-localisation
+    tag: latest
+    port: 8084
+    replicas: 1
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "250m"
+
+  alertes:
+    enabled: true
+    image: gestion_vehicules-service-alertes
+    tag: latest
+    port: 3002
+    replicas: 1
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "250m"
+
+  gateway:
+    enabled: true
+    image: gestion_vehicules-api-gateway
+    tag: latest
+    port: 4000
+    replicas: 1
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "250m"

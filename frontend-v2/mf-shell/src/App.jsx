@@ -188,6 +188,7 @@ function MainLayout() {
           return (
             <button
               key={item.key}
+              data-testid={`nav-${item.key}`}
               className={`nav-link ${page === item.key ? 'active' : ''}`}
               onClick={() => {
                 setPage(item.key);

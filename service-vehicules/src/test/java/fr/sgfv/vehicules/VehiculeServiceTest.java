@@ -5,6 +5,8 @@ import fr.sgfv.vehicules.entity.Vehicule;
 import fr.sgfv.vehicules.exception.*;
 import fr.sgfv.vehicules.kafka.VehiculeKafkaProducer;
 import fr.sgfv.vehicules.repository.VehiculeRepository;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -29,6 +31,12 @@ class VehiculeServiceTest {
     @Mock
     private VehiculeKafkaProducer kafkaProducer;
 
+    @Mock
+    private MeterRegistry meterRegistry;
+
+    @Mock
+    private Counter counter;
+
     @InjectMocks
     private VehiculeService vehiculeService;
 
@@ -47,6 +55,8 @@ class VehiculeServiceTest {
                 .kilometrage(15000)
                 .statut("DISPONIBLE")
                 .build();
+        
+        lenient().when(meterRegistry.counter(anyString())).thenReturn(counter);
     }
 
     // ── Tests creerVehicule ───────────────────────

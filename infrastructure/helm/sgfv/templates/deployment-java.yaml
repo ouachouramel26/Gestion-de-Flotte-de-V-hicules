@@ -1,0 +1,66 @@
+{{- range $name := (list "vehicules" "conducteurs" "maintenance") }}
+{{- $config := index $.Values.services $name }}
+{{- if $config.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-{{ $name }}
+  namespace: {{ $.Values.global.namespace }}
+  labels:
+    app: service-{{ $name }}
+spec:
+  replicas: {{ $config.replicas }}
+  selector:
+    matchLabels:
+      app: service-{{ $name }}
+  template:
+    metadata:
+      labels:
+        app: service-{{ $name }}
+    spec:
+      containers:
+        - name: service-{{ $name }}
+          image: "{{ $config.image }}:{{ $config.tag }}"
+          imagePullPolicy: {{ $.Values.global.imagePullPolicy }}
+          ports:
+            - containerPort: {{ $config.port }}
+          envFrom:
+            - configMapRef:
+                name: config-{{ $name }}
+          env:
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: secret-db
+                  key: username
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: secret-db
+                  key: password
+            - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI
+              value: "{{ $.Values.global.keycloak.url }}/realms/{{ $.Values.global.keycloak.realm }}"
+            - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI
+              value: "http://keycloak:8080/realms/{{ $.Values.global.keycloak.realm }}/protocol/openid-connect/certs"
+          resources:
+            {{- toYaml $config.resources | nindent 12 }}
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: {{ $config.port }}
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: {{ $config.port }}
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: {{ $config.port }}
+            periodSeconds: 10
+{{- end }}
+{{- end }}
