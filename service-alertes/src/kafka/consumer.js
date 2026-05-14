@@ -76,7 +76,18 @@ async function getUserName(keycloakId) {
 }
 
 const runConsumer = async () => {
-  await consumer.connect();
+  let connected = false;
+  while (!connected) {
+    try {
+      await consumer.connect();
+      connected = true;
+      console.log("[KAFKA] Connecté au broker avec succès !");
+    } catch (err) {
+      console.error("[KAFKA] Le broker n'est pas encore prêt, nouvelle tentative dans 5 secondes...");
+      await new Promise(resolve => setTimeout(resolve, 5000));
+    }
+  }
+
   await consumer.subscribe({ topics: ['conducteurs', 'maintenance', 'vehicules', 'localisation-events'], fromBeginning: true });
 
   await consumer.run({
@@ -92,30 +103,30 @@ const runConsumer = async () => {
 
         // MISE À JOUR DES CACHES
         if (topic === 'vehicules' && (payload.event === 'vehicule.created' || payload.plaque)) {
-           await db.query('INSERT INTO vehicules_cache (id, plaque) VALUES ($1, $2) ON CONFLICT (id) DO UPDATE SET plaque = EXCLUDED.plaque', [vId, payload.plaque]);
+          await db.query('INSERT INTO vehicules_cache (id, plaque) VALUES ($1, $2) ON CONFLICT (id) DO UPDATE SET plaque = EXCLUDED.plaque', [vId, payload.plaque]);
         }
         if (topic === 'conducteurs' && payload.eventType === 'CONDUCTEUR_CREATED') {
-           await db.query('INSERT INTO conducteurs_cache (id, keycloak_id) VALUES ($1, $2) ON CONFLICT (id) DO UPDATE SET keycloak_id = EXCLUDED.keycloak_id', [payload.conducteurId, payload.keycloakId]);
+          await db.query('INSERT INTO conducteurs_cache (id, keycloak_id) VALUES ($1, $2) ON CONFLICT (id) DO UPDATE SET keycloak_id = EXCLUDED.keycloak_id', [payload.conducteurId, payload.keycloakId]);
         }
 
         // 1. GESTION DES ASSIGNATIONS ET STATUTS
         const isAssignmentEvent = (topic === 'conducteurs' && payload.eventType === 'CONDUCTEUR_ASSIGNED') ||
-                                  (topic === 'vehicules' && payload.event === 'vehicule.assigned');
+          (topic === 'vehicules' && payload.event === 'vehicule.assigned');
 
         // Alerte pour nouveau véhicule
         if (topic === 'vehicules' && payload.event === 'vehicule.created') {
-           await insertAlerte('VEHICULE_CREE', 'INFO', 'ADMIN', null, vId, vPlaque, `Nouveau véhicule ajouté : ${vPlaque || vId}`);
+          await insertAlerte('VEHICULE_CREE', 'INFO', 'ADMIN', null, vId, vPlaque, `Nouveau véhicule ajouté : ${vPlaque || vId}`);
         }
 
         // Alerte pour changement de statut
         if (topic === 'vehicules' && payload.event === 'vehicule.status.changed') {
-           const nouveauStatut = payload.statut_nouveau || payload.statut;
-           if (nouveauStatut === 'EN_PANNE') {
-             await insertAlerte('PANNE_SIGNALEE', 'AVERTISSEMENT', 'ADMIN', null, vId, vPlaque, `Le véhicule ${vPlaque || vId} est passé en panne.`);
-             if (driverId) {
-               await insertAlerte('PANNE_SIGNALEE', 'AVERTISSEMENT', 'CONDUCTEUR', driverId, vId, vPlaque, `Votre véhicule ${vPlaque || vId} est signalé en panne.`);
-             }
-           }
+          const nouveauStatut = payload.statut_nouveau || payload.statut;
+          if (nouveauStatut === 'EN_PANNE') {
+            await insertAlerte('PANNE_SIGNALEE', 'AVERTISSEMENT', 'ADMIN', null, vId, vPlaque, `Le véhicule ${vPlaque || vId} est passé en panne.`);
+            if (driverId) {
+              await insertAlerte('PANNE_SIGNALEE', 'AVERTISSEMENT', 'CONDUCTEUR', driverId, vId, vPlaque, `Votre véhicule ${vPlaque || vId} est signalé en panne.`);
+            }
+          }
         }
 
         if (isAssignmentEvent) {
@@ -123,8 +134,8 @@ const runConsumer = async () => {
 
           // Résolution de l'ID si c'est un UUID interne
           if (keycloakId && keycloakId.length > 30 && keycloakId.includes('-')) {
-             const resolved = await getKeycloakIdFromInternal(keycloakId);
-             if (resolved) keycloakId = resolved;
+            const resolved = await getKeycloakIdFromInternal(keycloakId);
+            if (resolved) keycloakId = resolved;
           }
 
           if (keycloakId) {
