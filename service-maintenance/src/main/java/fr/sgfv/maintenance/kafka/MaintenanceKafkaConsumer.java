@@ -19,6 +19,7 @@ public class MaintenanceKafkaConsumer {
 
     private final VehiculeCacheRepository vehiculeRepository;
     private final TechnicienRepository technicienRepository;
+    private final fr.sgfv.maintenance.repository.MaintenanceRepository maintenanceRepository;
     private final MaintenanceService maintenanceService;
 
     @KafkaListener(topics = "${kafka.topics.vehicules-consumed:vehicules}", groupId = "${spring.kafka.consumer.group-id}")
@@ -53,15 +54,24 @@ public class MaintenanceKafkaConsumer {
 
             // AUTO-CREATION DE MAINTENANCE SI PANNE
             if ("EN_PANNE".equals(statutObj.toString())) {
-                log.info("Détection d'une PANNE pour le véhicule {}. Création automatique d'une maintenance.", vehiculeId);
-                try {
-                    fr.sgfv.maintenance.dto.MaintenanceRequestDto req = new fr.sgfv.maintenance.dto.MaintenanceRequestDto();
-                    req.setVehiculeId(vehiculeId);
-                    req.setTypeIntervention("REPARATION");
-                    req.setDescription("Panne signalée automatiquement via changement de statut du véhicule.");
-                    maintenanceService.signalerMaintenance(req);
-                } catch (Exception e) {
-                    log.error("Erreur lors de la création automatique de maintenance : {}", e.getMessage());
+                boolean hasActiveMaintenance = maintenanceRepository.findByVehiculeId(vehiculeId).stream()
+                        .anyMatch(m -> m.getStatut() == fr.sgfv.maintenance.entity.MaintenanceStatut.SIGNALEE || 
+                                       m.getStatut() == fr.sgfv.maintenance.entity.MaintenanceStatut.PLANIFIEE || 
+                                       m.getStatut() == fr.sgfv.maintenance.entity.MaintenanceStatut.EN_COURS);
+                                       
+                if (!hasActiveMaintenance) {
+                    log.info("Détection d'une PANNE pour le véhicule {}. Création automatique d'une maintenance.", vehiculeId);
+                    try {
+                        fr.sgfv.maintenance.dto.MaintenanceRequestDto req = new fr.sgfv.maintenance.dto.MaintenanceRequestDto();
+                        req.setVehiculeId(vehiculeId);
+                        req.setTypeIntervention("REPARATION");
+                        req.setDescription("Panne signalée automatiquement via changement de statut du véhicule.");
+                        maintenanceService.signalerMaintenance(req);
+                    } catch (Exception e) {
+                        log.error("Erreur lors de la création automatique de maintenance : {}", e.getMessage());
+                    }
+                } else {
+                    log.info("Le véhicule {} est en panne mais possède déjà une maintenance active. Pas d'auto-création.", vehiculeId);
                 }
             }
         }
