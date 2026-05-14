@@ -68,7 +68,7 @@ metadata:
 data:
   PORT: "8084"
   GRPC_PORT: "3001"
-  DATABASE_URL: "postgresql://sgfv:sgfv_secret@postgres-localisation:5432/localisation_db"
+  DATABASE_URL: "postgresql://sgfv:sgfv_secret@postgres-localisation-postgresql:5432/localisation_db"
   VEHICULES_DB_HOST: "postgres-vehicules-postgresql"
   KAFKA_BROKERS: "kafka:9092"
   KEYCLOAK_URL: "http://keycloak:8080"
