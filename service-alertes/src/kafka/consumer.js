@@ -122,9 +122,12 @@ const runConsumer = async () => {
         if (topic === 'vehicules' && payload.event === 'vehicule.status.changed') {
           const nouveauStatut = payload.statut_nouveau || payload.statut;
           if (nouveauStatut === 'EN_PANNE') {
-            await insertAlerte('PANNE_SIGNALEE', 'AVERTISSEMENT', 'ADMIN', null, vId, vPlaque, `Le véhicule ${vPlaque || vId} est passé en panne.`);
-            if (driverId) {
-              await insertAlerte('PANNE_SIGNALEE', 'AVERTISSEMENT', 'CONDUCTEUR', driverId, vId, vPlaque, `Votre véhicule ${vPlaque || vId} est signalé en panne.`);
+            const exists = await alertExists(vId, 'PANNE_SIGNALEE', 'ADMIN');
+            if (!exists) {
+              await insertAlerte('PANNE_SIGNALEE', 'AVERTISSEMENT', 'ADMIN', null, vId, vPlaque, `Le véhicule ${vPlaque || vId} est passé en panne.`);
+              if (driverId) {
+                await insertAlerte('PANNE_SIGNALEE', 'AVERTISSEMENT', 'CONDUCTEUR', driverId, vId, vPlaque, `Votre véhicule ${vPlaque || vId} est signalé en panne.`);
+              }
             }
           }
         }
@@ -162,7 +165,10 @@ const runConsumer = async () => {
 
           const resolvedPlaque = vPlaque || await getPlaque(vId) || vId;
           if (type === 'MAINTENANCE_SIGNALED') {
-            await insertAlerte('PANNE_SIGNALEE', 'AVERTISSEMENT', 'ADMIN', null, vId, resolvedPlaque, `Une panne a été signalée sur le véhicule ${resolvedPlaque}.`);
+            const exists = await alertExists(vId, 'PANNE_SIGNALEE', 'ADMIN');
+            if (!exists) {
+              await insertAlerte('PANNE_SIGNALEE', 'AVERTISSEMENT', 'ADMIN', null, vId, resolvedPlaque, `Une panne a été signalée sur le véhicule ${resolvedPlaque}.`);
+            }
           }
           else if (type === 'MAINTENANCE_PLANNED') {
             await insertAlerte('MAINTENANCE_PLANNED', 'INFO', 'TECHNICIEN', techId, vId, resolvedPlaque, `Une maintenance vous a été assignée pour le véhicule ${resolvedPlaque}.`);
