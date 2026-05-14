@@ -45,6 +45,13 @@ const createClient = (baseURL) => {
   });
 };
 
+const extractData = (data) => {
+  if (!data) return [];
+  if (Array.isArray(data)) return data;
+  if (data.data && Array.isArray(data.data)) return data.data;
+  return data;
+};
+
 const services = {
   vehicules: createClient(process.env.SERVICE_VEHICULES_URL),
   conducteurs: createClient(process.env.SERVICE_CONDUCTEURS_URL),
@@ -261,8 +268,9 @@ const resolvers = {
         const res = await services.localisation.get('/api/v1/zones', {
           headers: { Authorization: authHeader }
         });
-        const zones = extractData(res.data);
-        return zones.map(z => ({
+        console.log('[Gateway] Zones reçues de Localisation:', JSON.stringify(res.data));
+        const zonesData = extractData(res.data);
+        return zonesData.map(z => ({
           ...z,
           latitudeCentre: z.latitudeCentre ?? 48.8566,
           longitudeCentre: z.longitudeCentre ?? 2.3522,

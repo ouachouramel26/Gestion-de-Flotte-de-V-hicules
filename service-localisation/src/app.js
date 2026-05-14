@@ -74,12 +74,18 @@ app.post('/api/v1/positions', async (req, res) => {
          VALUES ($1, $2, $3, $4, $5, $6, ST_SetSRID(ST_MakePoint($4, $3), 4326))`,
         [now, vehiculeId, latitude, longitude, vitesse || 0, direction || null]
       );
-    } catch (_) {
-      await db.query(
-        `INSERT INTO positions (horodatage, vehicule_id, latitude, longitude, vitesse, direction)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [now, vehiculeId, latitude, longitude, vitesse || 0, direction || null]
-      );
+    } catch (dbErr) {
+      console.error('[DATABASE ERROR] Échec insertion position:', dbErr.message);
+      // Tentative de repli (pourrait échouer si point_geo est NOT NULL)
+      try {
+        await db.query(
+          `INSERT INTO positions (horodatage, vehicule_id, latitude, longitude, vitesse, direction, point_geo)
+           VALUES ($1, $2, $3, $4, $5, $6, ST_SetSRID(ST_MakePoint($4, $3), 4326))`,
+          [now, vehiculeId, latitude, longitude, vitesse || 0, direction || null]
+        );
+      } catch (retryErr) {
+        console.error('[DATABASE ERROR] Échec repli insertion:', retryErr.message);
+      }
     }
 
     // 2. Vérifier si le véhicule est dans une zone INTERDITE
@@ -164,7 +170,7 @@ app.post('/api/v1/zones', async (req, res) => {
       `INSERT INTO zones (nom, type, latitude_centre, longitude_centre, rayon_metres, geometrie)
        VALUES ($1, $2, CAST($3 AS float8), CAST($4 AS float8), $5, 
                ST_Buffer(ST_SetSRID(ST_MakePoint(CAST($4 AS float8), CAST($3 AS float8)), 4326)::geography, CAST($6 AS float8))::geometry)
-       RETURNING id, nom`,
+       RETURNING id, nom, type, latitude_centre as "latitudeCentre", longitude_centre as "longitudeCentre", rayon_metres as "rayonMetres"`,
       [nom, type, lat, lng, Math.round(rayon), rayon]
     );
     res.status(201).json(result.rows[0]);
@@ -217,17 +223,22 @@ app.get('/api/v1/vehicules', async (req, res) => {
 
     const vehicules = vehResult.rows.map(v => {
       const pos = posMap[v.id];
-      const lat = pos ? pos.latitude  : 48.8566 + (Math.random() - 0.5) * 0.1;
-      const lng = pos ? pos.longitude : 2.3522  + (Math.random() - 0.5) * 0.1;
+      // Si pas de position, on part du centre de Paris. Sinon on ajoute un petit mouvement aléatoire continu.
+      const lat = pos ? pos.latitude + (Math.random() - 0.5) * 0.005 : 48.8566 + (Math.random() - 0.5) * 0.1;
+      const lng = pos ? pos.longitude + (Math.random() - 0.5) * 0.005 : 2.3522 + (Math.random() - 0.5) * 0.1;
       
-      // Si c'est une position générée aléatoirement, on l'envoie à notre propre endpoint
+      // On simule toujours l'envoi de la position si le véhicule est EN_MISSION
       // pour déclencher la vérification des zones interdites (simulation réaliste).
-      if (!pos) {
-        fetch(`http://localhost:${process.env.PORT || 8084}/api/v1/positions`, {
+      if (v.statut === 'EN_MISSION') {
+        console.log(`[SIMULATION] Mouvement pour ${v.plaque} vers lat:${lat.toFixed(4)}, lng:${lng.toFixed(4)}`);
+        fetch(`http://127.0.0.1:${process.env.PORT || 8084}/api/v1/positions`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': req.headers.authorization || ''
+          },
           body: JSON.stringify({ vehiculeId: v.id, latitude: lat, longitude: lng, vitesse: 50, direction: 90 })
-        }).catch(err => console.error("Sim error:", err.message));
+        }).catch(err => console.error("[SIMULATION] Erreur:", err.message));
       }
 
       return {

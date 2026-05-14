@@ -209,7 +209,7 @@ export default function DashboardPage({ userRole, userName }) {
         <img src="/images/fleet-banner.png" alt="Flotte" />
         <div className="hero-overlay">
           <h1 style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <Activity size={28} /> Bonjour, {userName}
+            <Activity size={28} /> Bonjour, {myProfile ? `${myProfile.prenom} ${myProfile.nom}` : userName}
           </h1>
           <p style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
             <span style={{ background: rl.bg, color: rl.color, padding: '0.25rem 0.75rem', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 700 }}>

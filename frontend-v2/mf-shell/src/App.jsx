@@ -122,7 +122,10 @@ function MainLayout() {
     return allowedPages.includes(item.key);
   });
 
-  const userName = kc.tokenParsed?.preferred_username || kc.tokenParsed?.name || 'Utilisateur';
+  const givenName = kc.tokenParsed?.given_name || '';
+  const familyName = kc.tokenParsed?.family_name || '';
+  const fullName = `${givenName} ${familyName}`.trim();
+  const userName = fullName || kc.tokenParsed?.preferred_username || kc.tokenParsed?.name || 'Utilisateur';
   const userEmail = kc.tokenParsed?.email || '';
 
   const renderPage = () => {
