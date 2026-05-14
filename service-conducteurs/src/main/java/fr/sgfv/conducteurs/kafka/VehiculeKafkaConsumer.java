@@ -42,7 +42,7 @@ public class VehiculeKafkaConsumer {
                     log.info("Mise à jour réussie du conducteur {} avec le véhicule {}", conducteurId, vehiculeId);
                     
                     // Informer le service d'alertes du mapping ID interne <-> ID Keycloak
-                    conducteurKafkaProducer.publishConducteurAssigned(conducteurId, c.getKeycloakId(), vehiculeId);
+                    conducteurKafkaProducer.publishConducteurAssigned(conducteurId, c.getKeycloakId(), vehiculeId, c.getPrenom(), c.getNom());
                 }, () -> log.warn("Conducteur {} introuvable, impossible de synchroniser l'assignation", conducteurId));
                 
                 // Optionnel : Désassigner l'ancien véhicule si nécessaire ? 

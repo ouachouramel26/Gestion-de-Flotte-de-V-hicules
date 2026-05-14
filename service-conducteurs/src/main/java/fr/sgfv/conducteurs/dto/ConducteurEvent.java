@@ -18,5 +18,7 @@ public class ConducteurEvent {
     private UUID conducteurId;
     private String keycloakId;
     private UUID vehiculeId;
+    private String prenom;
+    private String nom;
     private LocalDateTime timestamp;
 }

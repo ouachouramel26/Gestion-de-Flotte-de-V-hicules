@@ -72,7 +72,7 @@ public class AssignationService {
         conducteurRepository.save(conducteur);
 
         // 5. Publier l'événement avec les deux IDs (interne pour service-vehicules, Keycloak pour service-alertes)
-        kafkaPublisher.publishConducteurAssigned(conducteur.getId(), conducteur.getKeycloakId(), request.getVehiculeId());
+        kafkaPublisher.publishConducteurAssigned(conducteur.getId(), conducteur.getKeycloakId(), request.getVehiculeId(), conducteur.getPrenom(), conducteur.getNom());
 
         return mapToResponseDto(savedAssignation);
     }

@@ -4,8 +4,8 @@ CREATE TABLE utilisateurs_cache (
     keycloak_id  VARCHAR(36)  NOT NULL,
     prenom       VARCHAR(50)  NOT NULL,
     nom          VARCHAR(50)  NOT NULL,
-    email        VARCHAR(100) NOT NULL,
-    role         VARCHAR(20)  NOT NULL,
+    email        VARCHAR(100) NULL,
+    role         VARCHAR(20)  NULL,
     date_sync    TIMESTAMP    NOT NULL DEFAULT NOW(),
 
     CONSTRAINT pk_utilisateurs_cache PRIMARY KEY (keycloak_id),

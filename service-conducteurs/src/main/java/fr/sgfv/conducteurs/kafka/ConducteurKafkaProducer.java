@@ -23,31 +23,35 @@ public class ConducteurKafkaProducer {
     @Value("${kafka.topics.conducteur-created}")
     private String rubriqueCreated;
 
-    public void publishConducteurAssigned(UUID conducteurId, String keycloakId, UUID vehiculeId) {
+    public void publishConducteurAssigned(UUID conducteurId, String keycloakId, UUID vehiculeId, String prenom, String nom) {
         ConducteurEvent event = ConducteurEvent.builder()
                 .eventId(UUID.randomUUID().toString())
                 .eventType("CONDUCTEUR_ASSIGNED")
                 .conducteurId(conducteurId)
                 .keycloakId(keycloakId)
                 .vehiculeId(vehiculeId)
+                .prenom(prenom)
+                .nom(nom)
                 .timestamp(LocalDateTime.now())
                 .build();
                 
         // Key is vehicleId so events for the same vehicle are ordered
         kafkaTemplate.send(rubriqueAssigned, String.valueOf(vehiculeId), event);
-        log.info("Message d'assignation envoyé pour véhicule {} et conducteur {}", vehiculeId, keycloakId);
+        log.info("Message d'assignation envoyé pour véhicule {} et conducteur {} ({})", vehiculeId, keycloakId, nom);
     }
     
-    public void publishConducteurCreated(UUID conducteurId, String keycloakId) {
+    public void publishConducteurCreated(UUID conducteurId, String keycloakId, String prenom, String nom) {
         ConducteurEvent event = ConducteurEvent.builder()
                 .eventId(UUID.randomUUID().toString())
                 .eventType("CONDUCTEUR_CREATED")
                 .conducteurId(conducteurId)
                 .keycloakId(keycloakId)
+                .prenom(prenom)
+                .nom(nom)
                 .timestamp(LocalDateTime.now())
                 .build();
                 
         kafkaTemplate.send(rubriqueCreated, String.valueOf(conducteurId), event);
-        log.info("Message de création envoyé pour conducteur {}", keycloakId);
+        log.info("Message de création envoyé pour conducteur {} ({})", keycloakId, nom);
     }
 }

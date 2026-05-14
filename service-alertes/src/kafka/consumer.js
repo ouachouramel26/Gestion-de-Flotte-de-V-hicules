@@ -107,6 +107,9 @@ const runConsumer = async () => {
         }
         if (topic === 'conducteurs' && payload.eventType === 'CONDUCTEUR_CREATED') {
           await db.query('INSERT INTO conducteurs_cache (id, keycloak_id) VALUES ($1, $2) ON CONFLICT (id) DO UPDATE SET keycloak_id = EXCLUDED.keycloak_id', [payload.conducteurId, payload.keycloakId]);
+          if (payload.prenom && payload.nom) {
+            await db.query('INSERT INTO utilisateurs_cache (keycloak_id, prenom, nom) VALUES ($1, $2, $3) ON CONFLICT (keycloak_id) DO UPDATE SET prenom = EXCLUDED.prenom, nom = EXCLUDED.nom', [payload.keycloakId, payload.prenom, payload.nom]);
+          }
         }
 
         // 1. GESTION DES ASSIGNATIONS ET STATUTS
@@ -147,6 +150,9 @@ const runConsumer = async () => {
               'INSERT INTO vehicule_assignments_cache (vehicule_id, conducteur_id) VALUES ($1, $2) ON CONFLICT (vehicule_id) DO UPDATE SET conducteur_id = EXCLUDED.conducteur_id, date_assignation = NOW()',
               [vId, keycloakId]
             );
+            if (payload.prenom && payload.nom) {
+              await db.query('INSERT INTO utilisateurs_cache (keycloak_id, prenom, nom) VALUES ($1, $2, $3) ON CONFLICT (keycloak_id) DO UPDATE SET prenom = EXCLUDED.prenom, nom = EXCLUDED.nom', [keycloakId, payload.prenom, payload.nom]);
+            }
 
             // Alerte uniquement pour le topic 'conducteurs' pour éviter les doublons
             if (topic === 'conducteurs') {

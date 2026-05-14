@@ -82,7 +82,7 @@ public class ConducteurService {
                 .build();
 
         Conducteur savedConducteur = conducteurRepository.save(conducteur);
-        kafkaPublisher.publishConducteurCreated(savedConducteur.getId(), savedConducteur.getKeycloakId());
+        kafkaPublisher.publishConducteurCreated(savedConducteur.getId(), savedConducteur.getKeycloakId(), savedConducteur.getPrenom(), savedConducteur.getNom());
         return mapToDto(savedConducteur);
     }
 

@@ -78,44 +78,36 @@ app.post('/api/v1/positions', async (req, res) => {
     console.log(`[POSITIONS] Recu vehiculeId=${vehiculeId} lat=${latitude} lng=${longitude}`);
     const now = new Date();
 
-    // 1. Insérer la position dans TimescaleDB (avec ou sans PostGIS)
+    // 1. Insérer la position
     try {
       await db.query(
-        `INSERT INTO positions (horodatage, vehicule_id, latitude, longitude, vitesse, direction, point_geo)
-         VALUES ($1, $2, $3, $4, $5, $6, ST_SetSRID(ST_MakePoint($4, $3), 4326))`,
+        `INSERT INTO positions (horodatage, vehicule_id, latitude, longitude, vitesse, direction)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
         [now, vehiculeId, latitude, longitude, vitesse || 0, direction || null]
       );
     } catch (dbErr) {
       console.error('[DATABASE ERROR] Échec insertion position:', dbErr.message);
-      // Tentative de repli (pourrait échouer si point_geo est NOT NULL)
-      try {
-        await db.query(
-          `INSERT INTO positions (horodatage, vehicule_id, latitude, longitude, vitesse, direction, point_geo)
-           VALUES ($1, $2, $3, $4, $5, $6, ST_SetSRID(ST_MakePoint($4, $3), 4326))`,
-          [now, vehiculeId, latitude, longitude, vitesse || 0, direction || null]
-        );
-      } catch (retryErr) {
-        console.error('[DATABASE ERROR] Échec repli insertion:', retryErr.message);
-      }
     }
 
-    // 2. Vérifier si le véhicule est dans une zone INTERDITE
+    // 2. Vérifier si le véhicule est dans une zone INTERDITE (Calcul Manuel)
     try {
-      const zoneCheck = await db.query(
-        `SELECT id, nom FROM zones
-         WHERE active = true AND type = 'INTERDITE'
-         AND ST_Contains(geometrie, ST_SetSRID(ST_MakePoint($1, $2), 4326))
-         LIMIT 1`,
-        [longitude, latitude]
-      );
-      if (zoneCheck.rows.length > 0) {
-        const zone = zoneCheck.rows[0];
-        console.warn(`[GEOFENCE] Vehicule ${vehiculeId} dans zone interdite: ${zone.nom}`);
-        const { sendGeofenceAlert } = require('./kafka/producer');
-        await sendGeofenceAlert(vehiculeId, 'INTERDITE', `Le vehicule est entré dans la zone interdite : ${zone.nom}`);
+      const allZones = await db.query("SELECT id, nom, latitude_centre, longitude_centre, rayon_metres FROM zones WHERE active = true AND type = 'INTERDITE'");
+      for (const zone of allZones.rows) {
+        // Formule de distance simplifiée (Euclidienne approximée)
+        // 1 degré lat ~ 111.32 km
+        const dLat = latitude - zone.latitude_centre;
+        const dLng = longitude - zone.longitude_centre;
+        const distance = Math.sqrt(dLat * dLat + dLng * dLng) * 111320; 
+
+        if (distance <= (zone.rayon_metres || 500)) {
+          console.warn(`[GEOFENCE] Vehicule ${vehiculeId} dans zone interdite: ${zone.nom} (Dist: ${distance.toFixed(0)}m)`);
+          const { sendGeofenceAlert } = require('./kafka/producer');
+          await sendGeofenceAlert(vehiculeId, 'INTERDITE', `Le véhicule est entré dans la zone interdite : ${zone.nom}`);
+          break; // Une seule alerte suffit
+        }
       }
     } catch (geoErr) {
-      console.warn('[GEOFENCE] PostGIS non disponible:', geoErr.message);
+      console.warn('[GEOFENCE] Erreur calcul zone:', geoErr.message);
     }
 
     res.status(201).json({ message: 'Position enregistrée' });
@@ -176,13 +168,12 @@ app.post('/api/v1/zones', async (req, res) => {
     const lng = parseFloat(longitudeCentre);
     const rayon = parseFloat(rayonMetres);
 
-    // On crée un polygone circulaire spatial avec PostGIS
+    // On crée une zone simple sans géométrie PostGIS
     const result = await db.query(
-      `INSERT INTO zones (nom, type, latitude_centre, longitude_centre, rayon_metres, geometrie)
-       VALUES ($1, $2, CAST($3 AS float8), CAST($4 AS float8), $5, 
-               ST_Buffer(ST_SetSRID(ST_MakePoint(CAST($4 AS float8), CAST($3 AS float8)), 4326)::geography, CAST($6 AS float8))::geometry)
+      `INSERT INTO zones (nom, type, latitude_centre, longitude_centre, rayon_metres)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING id, nom, type, latitude_centre as "latitudeCentre", longitude_centre as "longitudeCentre", rayon_metres as "rayonMetres"`,
-      [nom, type, lat, lng, Math.round(rayon), rayon]
+      [nom, type, lat, lng, Math.round(rayon)]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
