@@ -86,9 +86,24 @@ const runConsumer = async () => {
            await db.query('INSERT INTO conducteurs_cache (id, keycloak_id) VALUES ($1, $2) ON CONFLICT (id) DO UPDATE SET keycloak_id = EXCLUDED.keycloak_id', [payload.conducteurId, payload.keycloakId]);
         }
 
-        // 1. GESTION DES ASSIGNATIONS
+        // 1. GESTION DES ASSIGNATIONS ET STATUTS
         const isAssignmentEvent = (topic === 'conducteurs' && payload.eventType === 'CONDUCTEUR_ASSIGNED') ||
                                   (topic === 'vehicules' && payload.event === 'vehicule.assigned');
+
+        // Alerte pour nouveau véhicule
+        if (topic === 'vehicules' && payload.event === 'vehicule.created') {
+           await insertAlerte('VEHICULE_CREE', 'INFO', 'ADMIN', null, vId, vPlaque, `Nouveau véhicule ajouté : ${vPlaque || vId}`);
+        }
+
+        // Alerte pour changement de statut
+        if (topic === 'vehicules' && payload.event === 'vehicule.status.changed') {
+           const nouveauStatut = payload.statut_nouveau || payload.statut;
+           const niveau = nouveauStatut === 'EN_PANNE' ? 'AVERTISSEMENT' : 'INFO';
+           await insertAlerte('STATUT_CHANGE', niveau, 'ADMIN', null, vId, vPlaque, `Le véhicule ${vPlaque || vId} est passé en statut : ${nouveauStatut}`);
+           if (driverId) {
+             await insertAlerte('STATUT_CHANGE', niveau, 'CONDUCTEUR', driverId, vId, vPlaque, `Le statut de votre véhicule ${vPlaque || vId} a été mis à jour : ${nouveauStatut}`);
+           }
+        }
 
         if (isAssignmentEvent) {
           let keycloakId = payload.keycloakId || payload.conducteurId || payload.conducteur_id;

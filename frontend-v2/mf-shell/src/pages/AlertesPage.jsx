@@ -75,7 +75,7 @@ export default function AlertesPage({ userRole }) {
           variables: {
             niveau: filterNiveau || null,
             typeEvenement: filterType || null,
-            role: isAdmin ? "ADMIN" : null
+            role: userRole === 'admin' ? "ADMIN" : (userRole === 'technicien' ? "TECHNICIEN" : null)
           }
         })
       });

@@ -38,6 +38,10 @@ spec:
                 secretKeyRef:
                   name: secret-db
                   key: password
+            - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI
+              value: "http://localhost:8180/realms/sgfv"
+            - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI
+              value: "http://keycloak:8080/realms/sgfv/protocol/openid-connect/certs"
           resources:
             requests:
               memory: "256Mi"
@@ -112,6 +116,10 @@ spec:
                 secretKeyRef:
                   name: secret-db
                   key: password
+            - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI
+              value: "http://localhost:8180/realms/sgfv"
+            - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI
+              value: "http://keycloak:8080/realms/sgfv/protocol/openid-connect/certs"
           resources:
             requests:
               memory: "256Mi"
@@ -183,6 +191,10 @@ spec:
                 secretKeyRef:
                   name: secret-db
                   key: password
+            - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI
+              value: "http://localhost:8180/realms/sgfv"
+            - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI
+              value: "http://keycloak:8080/realms/sgfv/protocol/openid-connect/certs"
           resources:
             requests:
               memory: "256Mi"
@@ -387,6 +399,8 @@ spec:
               value: "http://service-alertes:3002"
             - name: KEYCLOAK_URL
               value: "http://keycloak:8080"
+            - name: KEYCLOAK_REALM
+              value: "sgfv"
             - name: KEYCLOAK_JWKS_URI
               value: "http://keycloak:8080/realms/sgfv/protocol/openid-connect/certs"
           resources:

@@ -22,11 +22,17 @@ const client = jwksClient({
 function getKey(header, callback) {
   client.getSigningKey(header.kid, (err, key) => {
     if (err || !key) {
-      console.error('[Gateway] Erreur JWKS (clé introuvable ou invalide):', err ? err.message : 'Pas de clé');
+      const errorMsg = err ? err.message : 'Clé introuvable';
+      console.error('[Gateway] Erreur JWKS (clé introuvable ou invalide):', errorMsg);
       callback(err || new Error('Clé invalide'));
       return;
     }
-    const signingKey = key.publicKey || key.rsaPublicKey;
+    const signingKey = key.getPublicKey ? key.getPublicKey() : (key.publicKey || key.rsaPublicKey);
+    if (!signingKey) {
+      console.error('[Gateway] Impossible d\'extraire la clé publique de l\'objet key');
+      callback(new Error('Clé publique manquante'));
+      return;
+    }
     callback(null, signingKey);
   });
 }

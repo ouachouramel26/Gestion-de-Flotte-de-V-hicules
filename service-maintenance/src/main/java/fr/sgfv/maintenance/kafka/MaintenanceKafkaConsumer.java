@@ -5,6 +5,7 @@ import fr.sgfv.maintenance.entity.Technicien;
 import fr.sgfv.maintenance.entity.VehiculeCache;
 import fr.sgfv.maintenance.repository.TechnicienRepository;
 import fr.sgfv.maintenance.repository.VehiculeCacheRepository;
+import fr.sgfv.maintenance.service.MaintenanceService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import java.util.UUID;
@@ -18,6 +19,7 @@ public class MaintenanceKafkaConsumer {
 
     private final VehiculeCacheRepository vehiculeRepository;
     private final TechnicienRepository technicienRepository;
+    private final MaintenanceService maintenanceService;
 
     @KafkaListener(topics = "${kafka.topics.vehicules-consumed:vehicules}", groupId = "${spring.kafka.consumer.group-id}")
     public void consumeVehiculeEvent(java.util.Map<String, Object> message) {
@@ -48,6 +50,20 @@ public class MaintenanceKafkaConsumer {
             
             vehiculeRepository.save(vehicule);
             log.info("Cache véhicule mis à jour pour {}", vehiculeId);
+
+            // AUTO-CREATION DE MAINTENANCE SI PANNE
+            if ("EN_PANNE".equals(statutObj.toString())) {
+                log.info("Détection d'une PANNE pour le véhicule {}. Création automatique d'une maintenance.", vehiculeId);
+                try {
+                    fr.sgfv.maintenance.dto.MaintenanceRequestDto req = new fr.sgfv.maintenance.dto.MaintenanceRequestDto();
+                    req.setVehiculeId(vehiculeId);
+                    req.setTypeIntervention("REPARATION");
+                    req.setDescription("Panne signalée automatiquement via changement de statut du véhicule.");
+                    maintenanceService.signalerMaintenance(req);
+                } catch (Exception e) {
+                    log.error("Erreur lors de la création automatique de maintenance : {}", e.getMessage());
+                }
+            }
         }
     }
 

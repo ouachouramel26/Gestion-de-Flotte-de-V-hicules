@@ -20,15 +20,17 @@ export default function DashboardPage({ userRole, userName }) {
   const fetchAll = async () => {
     try {
       const query = `
-        query GetDashboardData {
+        query GetDashboardData($role: RoleDestinataire) {
           vehicules { id plaque statut marque modele dateAjout }
           conducteurs { id }
           maintenances { id statut typeIntervention dateCreation technicienId }
-          alertes(estLu: false) { id }
+          alertes(estLu: false, role: $role) { id }
           mesAlertes { id }
           monProfil { id prenom nom email vehiculeAssigneId }
         }
       `;
+      
+      const roleParam = userRole === 'admin' ? 'ADMIN' : (userRole === 'technicien' ? 'TECHNICIEN' : null);
 
       const response = await fetch('/graphql', {
         method: 'POST',
@@ -36,7 +38,10 @@ export default function DashboardPage({ userRole, userName }) {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${keycloak.token}`
         },
-        body: JSON.stringify({ query })
+        body: JSON.stringify({ 
+          query,
+          variables: { role: roleParam }
+        })
       });
 
       const result = await response.json();
@@ -89,6 +94,9 @@ export default function DashboardPage({ userRole, userName }) {
   useEffect(() => {
     if (keycloak.token) {
       fetchAll();
+      // Rafraîchissement automatique toutes les 5 secondes
+      const interval = setInterval(fetchAll, 5000);
+      return () => clearInterval(interval);
     }
   }, [keycloak.token]);
 
@@ -310,7 +318,7 @@ export default function DashboardPage({ userRole, userName }) {
                 </div>
 
                 <div style={{ marginTop: '1.5rem', display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
-                  {assignedVehicle.statut === 'DISPONIBLE' && (
+                  {(assignedVehicle.statut?.toUpperCase() === 'DISPONIBLE' || !['EN_MISSION', 'EN_MAINTENANCE', 'EN_PANNE'].includes(assignedVehicle.statut?.toUpperCase())) && (
                     <button
                       className="btn btn-primary"
                       disabled={updatingStatus}
@@ -320,7 +328,7 @@ export default function DashboardPage({ userRole, userName }) {
                       <MapPin size={16} /> {updatingStatus ? '...' : 'Commencer Mission'}
                     </button>
                   )}
-                  {assignedVehicle.statut === 'EN_MISSION' && (
+                  {assignedVehicle.statut?.toUpperCase() === 'EN_MISSION' && (
                     <button
                       className="btn btn-success"
                       disabled={updatingStatus}
