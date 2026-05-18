@@ -47,7 +47,7 @@ function getKey(header, callback) {
 const createClient = (baseURL) => {
   return axios.create({
     baseURL,
-    timeout: 5000,
+    timeout: 30000,
   });
 };
 
@@ -597,25 +597,40 @@ const resolvers = {
       return res.data;
     },
     creerTechnicien: async (_, args, { token }) => {
-      const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
-      const res = await services.maintenance.post('/api/v1/techniciens', args, {
-        headers: { Authorization: authHeader }
-      });
-      return res.data;
+      try {
+        const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+        const res = await services.maintenance.post('/api/v1/techniciens', args, {
+          headers: { Authorization: authHeader }
+        });
+        return res.data;
+      } catch (err) {
+        console.error(`[Gateway] Erreur creerTechnicien: ${err.message}`, err.response?.data || '');
+        throw new Error(err.response?.data?.message || err.message);
+      }
     },
     modifierTechnicien: async (_, { id, ...args }, { token }) => {
-      const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
-      const res = await services.maintenance.put(`/api/v1/techniciens/${id}`, args, {
-        headers: { Authorization: authHeader }
-      });
-      return res.data;
+      try {
+        const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+        const res = await services.maintenance.put(`/api/v1/techniciens/${id}`, args, {
+          headers: { Authorization: authHeader }
+        });
+        return res.data;
+      } catch (err) {
+        console.error(`[Gateway] Erreur modifierTechnicien: ${err.message}`, err.response?.data || '');
+        throw new Error(err.response?.data?.message || err.message);
+      }
     },
     supprimerTechnicien: async (_, { id }, { token }) => {
-      const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
-      await services.maintenance.delete(`/api/v1/techniciens/${id}`, {
-        headers: { Authorization: authHeader }
-      });
-      return true;
+      try {
+        const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+        await services.maintenance.delete(`/api/v1/techniciens/${id}`, {
+          headers: { Authorization: authHeader }
+        });
+        return true;
+      } catch (err) {
+        console.error(`[Gateway] Erreur supprimerTechnicien: ${err.message}`, err.response?.data || '');
+        throw new Error(err.response?.data?.message || err.message);
+      }
     },
 
     // Service Alertes

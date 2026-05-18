@@ -63,8 +63,8 @@ export default function DashboardPage({ userRole, userName }) {
         vehicules: vehicules ? vehicules.length : 0,
         conducteurs: conducteurs ? conducteurs.length : 0,
         maintenances: (maintenances && isTechnicien && !isAdmin && monProfil)
-          ? maintenances.filter(m => m.technicienId === monProfil.id && m.statut !== 'TERMINEE').length
-          : (maintenances?.filter(m => m.statut !== 'TERMINEE').length || 0),
+          ? maintenances.filter(m => m.technicienId === monProfil.id && m.statut !== 'TERMINEE' && m.statut !== 'ANNULEE').length
+          : (maintenances?.filter(m => m.statut !== 'TERMINEE' && m.statut !== 'ANNULEE').length || 0),
         alertes: isConducteur ? (mesAlertes?.length || 0) : (alertes?.length || 0),
         enService: vehicules ? vehicules.filter(v => v.statut === 'EN_MISSION' || v.statut === 'EN_SERVICE').length : 0,
       });
