@@ -2,8 +2,12 @@ const { Pool } = require('pg');
 const fs = require('fs');
 const path = require('path');
 
+const connectionString = process.env.DATABASE_URL || 
+  `postgresql://${process.env.DB_USER || 'sgfv'}:${process.env.DB_PASSWORD || 'sgfv_secret'}@${process.env.DB_HOST || 'postgres-localisation'}:5432/${process.env.DB_NAME || 'localisation_db'}`;
+
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://sgfv:sgfv_secret@postgres-localisation:5432/localisation_db'
+  connectionString,
+  ssl: { rejectUnauthorized: false }
 });
 
 // Auto-migration

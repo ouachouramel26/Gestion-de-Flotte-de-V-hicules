@@ -273,8 +273,17 @@ spec:
             - configMapRef:
                 name: config-localisation
           env:
-            - name: DATABASE_URL
-              value: "postgresql://sgfv:sgfv_secret@postgres-localisation-postgresql:5432/localisation_db"
+            - name: DB_USER
+              value: "postgres"
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-localisation-credentials
+                  key: PATRONI_SUPERUSER_PASSWORD
+            - name: DB_HOST
+              value: "postgres-localisation"
+            - name: DB_NAME
+              value: "postgres"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://otel-collector:4317"
             - name: OTEL_TRACES_EXPORTER
