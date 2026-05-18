@@ -290,6 +290,10 @@ spec:
               value: "otlp"
             - name: OTEL_METRICS_EXPORTER
               value: "otlp"
+            - name: OTEL_SERVICE_NAME
+              value: "service-localisation"
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "deployment.environment=production"
           resources:
             requests:
               memory: "128Mi"
@@ -447,6 +451,8 @@ spec:
               value: "http://otel-collector:4317"
             - name: OTEL_TRACES_EXPORTER
               value: "otlp"
+            - name: OTEL_SERVICE_NAME
+              value: "api-gateway"
           resources:
             requests:
               memory: "128Mi"

@@ -66,18 +66,24 @@ helm upgrade --install postgres-localisation timescale/timescaledb-single `
 helm upgrade --install prometheus prometheus-community/prometheus `
   --namespace sgfv `
   --set server.persistentVolume.enabled=false `
-  --set alertmanager.enabled=false
+  --set alertmanager.enabled=false `
+  --set prometheus-node-exporter.enabled=false
 
 # 9. Monitoring : Grafana
 helm upgrade --install grafana grafana/grafana `
   --namespace sgfv `
   --set adminPassword=admin123 `
-  --set persistence.enabled=false
+  --set persistence.enabled=false `
+  --set "extraConfigmapMounts[0].name=grafana-datasources" `
+  --set "extraConfigmapMounts[0].mountPath=/etc/grafana/provisioning/datasources" `
+  --set "extraConfigmapMounts[0].configMap=grafana-datasources" `
+  --set "extraConfigmapMounts[0].readOnly=true"
 
 # 10. Logs : Loki (utilisation de loki-stack plus adapté au dev monopode local)
 helm upgrade --install loki grafana/loki-stack `
   --namespace sgfv `
-  --set loki.persistence.enabled=false
+  --set loki.persistence.enabled=false `
+  --set-string loki.podAnnotations."prometheus\.io/port"="3100"
 
 # 11. Tracing : Jaeger
 helm upgrade --install jaeger jaegertracing/jaeger `

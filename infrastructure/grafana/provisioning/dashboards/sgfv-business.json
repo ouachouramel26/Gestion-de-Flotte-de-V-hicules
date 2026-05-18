@@ -85,13 +85,13 @@
             "uid": null
           },
           "editorMode": "code",
-          "expr": "count(vehicules_created_total)",
+          "expr": "sum(http_server_requests_seconds_count{application=\"service-vehicules\"})",
           "instant": true,
           "range": false,
           "refId": "A"
         }
       ],
-      "title": "Total Véhicules",
+      "title": "Appels Service Véhicules",
       "type": "stat"
     },
     {
