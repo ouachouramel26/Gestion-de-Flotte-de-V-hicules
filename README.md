@@ -1,31 +1,31 @@
-# SGFV - Système Global de Gestion de Flotte de Véhicules 🏎️📡
+# SGFV - Système Global de Gestion de Flotte de Véhicules 
 
-## 🎓 Projet Master 1 - Architecture Micro-Services & Cloud-Native
+## Projet Master 1 - Architecture Micro-Services & Cloud-Native
 
-Bienvenue dans le projet **SGFV**, une plateforme complète conçue pour la gestion moderne de flottes automobiles. Ce projet démontre la maîtrise d'une stack technologique avancée distribuée.
+Bienvenue dans le projet **SGFV**, une plateforme complète conçue pour la gestion moderne de flottes automobiles.
 
 ---
 
-## 🏗️ Architecture Technique
+##  Architecture Technique
 
 Le système repose sur une architecture en **microservices** hautement découplés :
 
-### 🔙 Back-End (Écosystème Distribué)
-- **API Gateway (Apollo GraphQL)** : Point d'entrée unique agrégeant les données des différents services. 🧠
+###  Back-End (Écosystème Distribué)
+- **API Gateway (Apollo GraphQL)** : Point d'entrée unique agrégeant les données des différents services. 
 - **Service Véhicules (Java/Spring Boot)** : Gestion du cycle de vie des véhicules, stockage Postgres.
 - **Service Conducteurs (Java/Spring Boot)** : Gestion des chauffeurs et assignations.
 - **Service Maintenance (Java/Spring Boot)** : Alertes et planification technique.
-- **Service Localisation (Node.js/gRPC)** : Tracking GPS en temps réel via streaming binaire. 🛰️
-- **Bus d'événements (Apache Kafka)** : Communication asynchrone pour garantir la cohérence (Saga Pattern). 📩
+- **Service Localisation (Node.js/gRPC)** : Tracking GPS en temps réel via streaming binaire. 
+- **Bus d'événements (Apache Kafka)** : Communication asynchrone pour garantir la cohérence (Saga Pattern). 
 
-### ⚡ Front-End (Micro-Frontends)
+###  Front-End (Micro-Frontends)
 - **App Shell (Host)** : Orchestrateur principal gérant l'authentification et le dashboard.
 - **Remote Map (Micro-Frontend)** : Module spécialisé en cartographie Leaflet, injecté dynamiquement via **Module Federation**.
-- **Sécurité (Keycloak)** : Authentification unifiée (SSO) et contrôle d'accès basé sur les rôles (RBAC). 🔐
+- **Sécurité (Keycloak)** : Authentification unifiée (SSO) et contrôle d'accès basé sur les rôles (RBAC). 
 
 ---
 
-## 🛠️ Stack Technologique
+##  Stack Technologique
 
 | Domaine | Technologies |
 | :--- | :--- |
@@ -33,12 +33,12 @@ Le système repose sur une architecture en **microservices** hautement découpl�
 | **Frameworks** | Spring Boot 3.2, React 18, Apollo GraphQL |
 | **Infrastructure** | Kubernetes (Minikube), Docker Compose |
 | **Streaming** | Apache Kafka, gRPC |
-| **Observabilité** | OpenTelemetry, Prometheus, Actuator |
-| **Tests** | JUnit 5, JaCoCo (80% coverage), Cypress (E2E) |
+| **Observabilité** | OpenTelemetry, Prometheus|
+| **Tests** | JUnit 5, Cypress (E2E) |
 
 ---
 
-## 🚀 Guide de Lancement Rapide (Local)
+## Guide de Lancement Rapide (Local)
 
 ### 1. Démarrer l'Infrastructure
 ```powershell
@@ -73,16 +73,16 @@ Accès : `http://localhost:3000` (Login Keycloak requis)
 
 ---
 
-## 📖 Documentation Complète
+## Documentation Complète
 
 Le projet est documenté en profondeur pour faciliter la maintenance et l'évolution :
 
-### 🚀 Démarrage & Utilisation
+###  Démarrage & Utilisation
 - **[Guide de Lancement (Docker/K8s)](docs/GUIDE_LANCEMENT.md)**
 - **[Guide Utilisateur (Fonctionnel)](docs/GUIDE_UTILISATEUR.md)**
 - **[Comptes & Accès](docs/COMPTES.md)**
 
-### 🏗️ Architecture & Technique
+### Architecture & Technique
 - **[Architecture Globale](ARCHITECTURE.md)**
 - **[Décisions d'Architecture (ADR)](docs/adr/)**
 - **[Sécurité & Keycloak](docs/keycloak/README.md)**
@@ -99,7 +99,7 @@ Le projet est documenté en profondeur pour faciliter la maintenance et l'évolu
 
 ---
 
-## 🏆 Points Forts du Projet
+##  Points Forts du Projet
 - **Consistance Event-Driven** : Utilisation de Kafka pour synchroniser les états entre services.
 - **Micro-Frontend Architecture** : Découpage réel de l'UI pour une scalabilité maximale.
 - **Observabilité Standardisée** : Tracing distribué intégré via OpenTelemetry.
